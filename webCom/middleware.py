@@ -1,5 +1,5 @@
 from django.conf import settings
-from django.db import OperationalError, ProgrammingError
+from django.db import DatabaseError, OperationalError, ProgrammingError
 from django.http import HttpResponse
 
 from .models import AuditLog
@@ -15,7 +15,18 @@ class VercelConfigurationMiddleware:
         if errors:
             body = "Deployment configuration required:\n\n" + "\n".join(f"- {error}" for error in errors)
             return HttpResponse(body, status=503, content_type="text/plain; charset=utf-8")
-        return self.get_response(request)
+        try:
+            return self.get_response(request)
+        except DatabaseError:
+            if getattr(settings, "IS_VERCEL_RUNTIME", False):
+                body = (
+                    "Database is not ready for this deployment.\n\n"
+                    "- Confirm DATABASE_URL points to a hosted PostgreSQL database.\n"
+                    "- Confirm Vercel build logs show migrations completed successfully.\n"
+                    "- Visit /system/health/ after redeploying to verify database access.\n"
+                )
+                return HttpResponse(body, status=503, content_type="text/plain; charset=utf-8")
+            raise
 
 class RequestAuditMiddleware:
     """Records authenticated staff write activity for compliance traceability."""

@@ -10,6 +10,7 @@ staff_required = user_passes_test(lambda user: user.is_authenticated and user.is
 
 urlpatterns = [
     path("", views.public_home, name="public_home"),
+    path("system/health/", views.system_health, name="system_health"),
     path("staff/login/", auth_views.LoginView.as_view(template_name="webCom/login.html"), name="login"),
     path("staff/logout/", auth_views.LogoutView.as_view(next_page="webcom:public_home"), name="logout"),
     path("who-we-are/", views.public_page, {"page": "who-we-are"}, name="who_we_are"),

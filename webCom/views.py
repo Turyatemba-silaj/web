@@ -9,7 +9,7 @@ from decimal import Decimal
 
 from django.contrib import messages
 from django.contrib.auth import get_user_model
-from django.db import DatabaseError, models, transaction
+from django.db import DatabaseError, connection, models, transaction
 from django.conf import settings
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.core.mail import send_mail
@@ -162,7 +162,7 @@ MODEL_CONFIGS = {
     "deployment-areas": {"model": DeploymentArea, "form": DeploymentAreaForm, "title": "Deployment Areas", "icon": "DA", "fields": ["employee", "region", "start_date", "end_date", "status", "transferred_by_hr_manager"], "detail_fields": ["deployment_area_id", "employee", "region", "start_date", "end_date", "status", "transferred_by_hr_manager", "transfer_notes"], "entry_fields": ["employee", "region", "start_date", "end_date", "status", "transferred_by_hr_manager", "transfer_notes"], "required_only": False},
     "roles": {"model": Role, "form": RoleForm, "title": "Roles", "icon": "RO", "fields": ["role_name", "department", "description"]},
     "positions": {"model": Position, "form": PositionForm, "title": "Positions", "icon": "PO", "fields": ["position_title", "department", "grade_level", "salary_range_min", "salary_range_max"]},
-    "employees": {"model": Employee, "form": EmployeeForm, "title": "Employees", "icon": "EM", "fields": ["employee_id", "employee_number", "first_name", "last_name", "role", "position", "department", "current_deployment_area", "daily_rate", "is_reliever", "status"], "detail_fields": ["employee_id", "employee_number", "first_name", "last_name", "date_of_birth", "gender", "phone_number", "email", "address", "national_id", "nssf_number", "role", "position", "department", "current_deployment_area", "daily_rate", "is_reliever", "payout_method", "bank_name", "bank_account_name", "bank_account_number", "mobile_money_provider", "mobile_money_number", "qualification", "hire_date", "status"], "entry_fields": ["first_name", "last_name", "date_of_birth", "gender", "phone_number", "email", "address", "national_id", "role", "position", "department", "hire_date", "deployment_area", "is_reliever", "payout_method", "bank_name", "bank_account_name", "bank_account_number", "mobile_money_provider", "mobile_money_number"], "ordering": ["employee_id"], "required_only": False},
+    "employees": {"model": Employee, "form": EmployeeForm, "title": "Employees", "icon": "EM", "fields": ["employee_id", "employee_number", "first_name", "last_name", "role", "position", "department", "current_deployment_area", "daily_rate", "is_reliever", "status", "account_status_display"], "detail_fields": ["employee_id", "employee_number", "first_name", "last_name", "date_of_birth", "gender", "phone_number", "email", "address", "national_id", "nssf_number", "role", "position", "department", "current_deployment_area", "daily_rate", "is_reliever", "payout_method", "bank_name", "bank_account_name", "bank_account_number", "mobile_money_provider", "mobile_money_number", "qualification", "hire_date", "status", "account_status_display"], "entry_fields": ["first_name", "last_name", "date_of_birth", "gender", "phone_number", "email", "address", "national_id", "role", "position", "department", "hire_date", "deployment_area", "is_reliever", "payout_method", "bank_name", "bank_account_name", "bank_account_number", "mobile_money_provider", "mobile_money_number", "status"], "ordering": ["employee_id"], "required_only": False},
     "guards": {"model": Guard, "form": GuardForm, "title": "Guards", "icon": "GD", "fields": ["employee", "qualification", "armed_status"]},
     "supervisors": {"model": Supervisor, "form": SupervisorForm, "title": "Supervisors", "icon": "SV", "fields": ["employee", "authority_level"]},
     "training": {"model": Training, "form": TrainingForm, "title": "Training", "icon": "TR", "fields": ["training_type", "trainee", "training_name", "provider", "start_date", "end_date"], "detail_fields": ["training_id", "training_type", "trainee", "training_name", "provider", "start_date", "end_date"], "entry_fields": ["training_type", "employee", "recruit", "training_name", "provider", "start_date", "end_date"], "required_only": False},
@@ -272,6 +272,7 @@ def get_field_label(model, field_name):
         "overtime_daily_rate": "Overtime Daily Rate",
         "region": "Deployment Area",
         "shift_summary": "Shift Type",
+        "account_status_display": "Account Access",
     }
     if field_name in custom_labels:
         return custom_labels[field_name]
@@ -629,6 +630,24 @@ def public_home(request):
     }
     return public_render(request, "webCom/public_home.html", context)
 
+
+def system_health(request):
+    errors = getattr(settings, "VERCEL_CONFIGURATION_ERRORS", [])
+    if errors:
+        return JsonResponse(
+            {"ok": False, "configuration": "error", "errors": errors},
+            status=503,
+        )
+    try:
+        with connection.cursor() as cursor:
+            cursor.execute("SELECT 1")
+            cursor.fetchone()
+    except DatabaseError as exc:
+        return JsonResponse(
+            {"ok": False, "database": "error", "error_type": exc.__class__.__name__},
+            status=503,
+        )
+    return JsonResponse({"ok": True, "database": "ok"})
 
 def public_page(request, page):
     page_data = {

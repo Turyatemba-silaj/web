@@ -44,6 +44,17 @@ VERCEL_CONFIGURATION_ERRORS = []
 ALLOWED_HOSTS = [host.strip() for host in os.environ.get("DJANGO_ALLOWED_HOSTS", "localhost,127.0.0.1").split(",") if host.strip()]
 if os.environ.get("VERCEL") and ".vercel.app" not in ALLOWED_HOSTS:
     ALLOWED_HOSTS.append(".vercel.app")
+CSRF_TRUSTED_ORIGINS = [
+    origin.strip()
+    for origin in os.environ.get("DJANGO_CSRF_TRUSTED_ORIGINS", "").split(",")
+    if origin.strip()
+]
+for host in ALLOWED_HOSTS:
+    if host.startswith("."):
+        CSRF_TRUSTED_ORIGINS.append(f"https://*{host}")
+    elif host not in {"localhost", "127.0.0.1"}:
+        CSRF_TRUSTED_ORIGINS.append(f"https://{host}")
+CSRF_TRUSTED_ORIGINS = list(dict.fromkeys(CSRF_TRUSTED_ORIGINS))
 if REQUIRE_PRODUCTION_CONFIG:
     if SECRET_KEY == "django-insecure-local-development-only-change-me":
         if IS_VERCEL_RUNTIME:
@@ -57,6 +68,7 @@ if REQUIRE_PRODUCTION_CONFIG:
             raise ImproperlyConfigured("DJANGO_ALLOWED_HOSTS must list explicit production hosts.")
 
 SECURE_SSL_REDIRECT = env_bool("DJANGO_SECURE_SSL_REDIRECT", not DEBUG)
+SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 SECURE_HSTS_SECONDS = int(os.environ.get("DJANGO_SECURE_HSTS_SECONDS", "31536000" if not DEBUG else "0"))
 SECURE_HSTS_INCLUDE_SUBDOMAINS = env_bool("DJANGO_SECURE_HSTS_INCLUDE_SUBDOMAINS", not DEBUG)
 SECURE_HSTS_PRELOAD = env_bool("DJANGO_SECURE_HSTS_PRELOAD", False)
@@ -70,6 +82,7 @@ CSRF_COOKIE_SAMESITE = "Lax"
 X_FRAME_OPTIONS = "SAMEORIGIN"
 SECURE_REFERRER_POLICY = "same-origin"
 AUDIT_LOG_ENABLED = env_bool("DJANGO_AUDIT_LOG_ENABLED", True)
+EMPLOYEE_DEFAULT_PASSWORD = os.environ.get("EMPLOYEE_DEFAULT_PASSWORD", "ChangeMe123!")
 DATA_UPLOAD_MAX_MEMORY_SIZE = int(os.environ.get("DJANGO_DATA_UPLOAD_MAX_MEMORY_SIZE", str(5 * 1024 * 1024)))
 FILE_UPLOAD_MAX_MEMORY_SIZE = int(os.environ.get("DJANGO_FILE_UPLOAD_MAX_MEMORY_SIZE", str(5 * 1024 * 1024)))
 
@@ -85,7 +98,6 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
     "webCom",
 ]
-
 MIDDLEWARE = [
     'webCom.middleware.VercelConfigurationMiddleware',
     'django.middleware.security.SecurityMiddleware',
@@ -159,6 +171,8 @@ def invalid_database_url_reason(name, database_url):
         return f"{name} is still placeholder text. Replace it with a real hosted PostgreSQL connection string."
     if scheme not in VALID_DATABASE_SCHEMES:
         return f"{name} must be a real database URL, for example postgresql://user:password@host/database?sslmode=require."
+    if IS_VERCEL_RUNTIME and scheme == "sqlite":
+        return f"{name} must point to hosted PostgreSQL on Vercel. SQLite is only supported for local development."
     return ""
 
 

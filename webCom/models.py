@@ -2,6 +2,8 @@ from datetime import datetime, timedelta
 from decimal import Decimal
 
 from django.conf import settings
+from django.contrib.auth import get_user_model
+from django.contrib.auth.models import Group
 from django.core.exceptions import ValidationError
 from django.db import models
 from django.db.models.signals import m2m_changed
@@ -832,6 +834,8 @@ class Employee(models.Model):
         ('active', 'Active'),
         ('inactive', 'Inactive'),
         ('on_leave', 'On Leave'),
+        ('resigned', 'Resigned'),
+        ('dismissed', 'Dismissed'),
         ('terminated', 'Terminated'),
     ]
     status = models.CharField(max_length=20, choices=EMPLOYEE_STATUS_CHOICES, default='active')
@@ -978,6 +982,91 @@ class Employee(models.Model):
 
         self.salary_scale = self.calculate_daily_rate()
 
+    SEPARATION_STATUSES = {"resigned", "dismissed", "terminated"}
+    ACCOUNT_GROUP_BY_ROLE = {
+        "supervisor": "Supervisor",
+        "manager": "Operations Manager",
+        "operations_officer": "Operations Manager",
+        "hr_officer": "Human Resources",
+        "finance_officer": "Finance Officer",
+    }
+
+    @property
+    def is_separated(self):
+        return self.status in self.SEPARATION_STATUSES
+
+    @property
+    def account_username(self):
+        return (self.employee_number or "").strip()
+
+    def linked_user_account(self):
+        User = get_user_model()
+        email = (self.email or "").strip()
+        username = self.account_username
+        if email:
+            user = User.objects.filter(email__iexact=email).first()
+            if user:
+                return user
+        if username:
+            return User.objects.filter(username__iexact=username).first()
+        return None
+
+    def sync_user_account(self):
+        user = self.linked_user_account()
+        if self.is_separated:
+            if user and user.is_active:
+                user.is_active = False
+                user.save(update_fields=["is_active"])
+            return user
+
+        if self.status != "active":
+            return user
+
+        group_name = self.ACCOUNT_GROUP_BY_ROLE.get(self.role)
+        if not group_name:
+            return user
+
+        User = get_user_model()
+        defaults = {
+            "email": self.email,
+            "first_name": self.first_name,
+            "last_name": self.last_name,
+            "is_staff": True,
+            "is_active": True,
+        }
+        if user:
+            created = False
+        else:
+            user, created = User.objects.get_or_create(username=self.account_username, defaults=defaults)
+
+        changed_fields = []
+        for field, value in defaults.items():
+            if getattr(user, field) != value:
+                setattr(user, field, value)
+                changed_fields.append(field)
+        if created or not user.has_usable_password():
+            user.set_password(getattr(settings, "EMPLOYEE_DEFAULT_PASSWORD", "ChangeMe123!"))
+            changed_fields.append("password")
+        if changed_fields:
+            user.save(update_fields=sorted(set(changed_fields)))
+
+        group, _created = Group.objects.get_or_create(name=group_name)
+        user.groups.add(group)
+        return user
+
+    @property
+    def account_status_display(self):
+        user = self.linked_user_account()
+        if self.is_separated:
+            return "Deactivated" if user else "No login account"
+        if user and user.is_active:
+            return "Active login"
+        if user and not user.is_active:
+            return "Blocked login"
+        if self.status == "active" and self.role in self.ACCOUNT_GROUP_BY_ROLE:
+            return "Pending account sync"
+        return "No login account"
+
     def save(self, *args, **kwargs):
         self.set_employee_number()
         self.set_salary_profile()
@@ -991,6 +1080,7 @@ class Employee(models.Model):
         )
         salary.update_basic_salary()
         salary.save(update_fields=["basic_salary", "updated_at"])
+        self.sync_user_account()
 
     @property
     def employee_number_name(self):

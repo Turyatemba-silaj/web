@@ -2387,3 +2387,71 @@ class PasswordManagementTests(TestCase):
         self.assertRedirects(response, reverse("webcom:password_management"))
         self.staff_user.refresh_from_db()
         self.assertFalse(self.staff_user.is_active)
+
+    def test_separated_employee_save_deactivates_linked_user(self):
+        self.staff_user.is_active = True
+        self.staff_user.save(update_fields=["is_active"])
+        employee = Employee.objects.create(
+            first_name="Separated",
+            last_name="Staff",
+            date_of_birth=date(1990, 1, 1),
+            gender="M",
+            phone_number="0700000001",
+            email="staff@example.com",
+            address="Kampala",
+            national_id="NAT-TERM-002",
+            role="hr_officer",
+            position="hr_officer",
+            department="hr",
+            hire_date=date(2020, 1, 1),
+            status="active",
+        )
+
+        employee.status = "resigned"
+        employee.save(update_fields=["status"])
+
+        self.staff_user.refresh_from_db()
+        self.assertFalse(self.staff_user.is_active)
+
+    def test_active_employee_save_creates_grouped_user_with_default_password(self):
+        employee = Employee.objects.create(
+            first_name="Finance",
+            last_name="Access",
+            date_of_birth=date(1990, 1, 1),
+            gender="F",
+            phone_number="0700000002",
+            email="finance.access@example.com",
+            address="Kampala",
+            national_id="NAT-ACTIVE-001",
+            role="finance_officer",
+            position="finance_officer",
+            department="finance",
+            hire_date=date(2020, 1, 1),
+            status="active",
+        )
+
+        user = get_user_model().objects.get(username=employee.employee_number)
+        self.assertTrue(user.is_active)
+        self.assertTrue(user.is_staff)
+        self.assertEqual(user.email, employee.email)
+        self.assertTrue(user.check_password("ChangeMe123!"))
+        self.assertTrue(user.groups.filter(name="Finance Officer").exists())
+
+    def test_guard_employee_does_not_receive_unrestricted_staff_login(self):
+        employee = Employee.objects.create(
+            first_name="Guard",
+            last_name="NoLogin",
+            date_of_birth=date(1990, 1, 1),
+            gender="M",
+            phone_number="0700000003",
+            email="guard.nologin@example.com",
+            address="Kampala",
+            national_id="NAT-GUARD-NOLOGIN",
+            role="guard",
+            position="security_guard",
+            department="operations",
+            hire_date=date(2020, 1, 1),
+            status="active",
+        )
+
+        self.assertFalse(get_user_model().objects.filter(username=employee.employee_number).exists())
