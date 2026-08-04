@@ -1291,9 +1291,17 @@
                         <span>Dashboard</span>
                     </a>
                     {% if request.user.is_superuser %}
-                        <a class="nav-link {% if active_model == 'password-management' %}active{% endif %}" href="{% url 'webcom:password_management' %}">
-                            <span>Password Management</span>
-                        </a>
+                        <details class="nav-group" {% if active_model == 'password-management' or active_model == 'audit-logs' %}open{% endif %}>
+                            <summary><span class="nav-heading">Admin</span></summary>
+                            <div class="nav-group-items">
+                                <a class="nav-link {% if active_model == 'password-management' %}active{% endif %}" href="{% url 'webcom:password_management' %}">
+                                    <span>Access Control</span>
+                                </a>
+                                <a class="nav-link {% if active_model == 'audit-logs' %}active{% endif %}" href="{% url 'webcom:list' 'audit-logs' %}">
+                                    <span>Audit Logs</span>
+                                </a>
+                            </div>
+                        </details>
                     {% endif %}
                 </div>
                 {% for department in sidebar_departments %}
@@ -1395,3 +1403,4 @@
     </script>
 </body>
 </html>
+

@@ -1,8 +1,9 @@
 from django.conf import settings
 from django.db import DatabaseError, OperationalError, ProgrammingError
 from django.http import HttpResponse
+from django.shortcuts import redirect
 
-from .models import AuditLog
+from .models import AuditLog, UserPasswordProfile
 
 class VercelConfigurationMiddleware:
     """Shows deployment configuration errors before views touch the DB."""
@@ -27,6 +28,36 @@ class VercelConfigurationMiddleware:
                 )
                 return HttpResponse(body, status=503, content_type="text/plain; charset=utf-8")
             raise
+
+
+class PasswordExpiryMiddleware:
+    """Forces staff users to change passwords every 90 days or after admin reset."""
+
+    EXEMPT_PATHS = (
+        "/staff/login/",
+        "/staff/logout/",
+        "/staff/forgot-password/",
+        "/staff/password-expired/",
+        "/static/",
+        "/media/",
+    )
+
+    def __init__(self, get_response):
+        self.get_response = get_response
+
+    def __call__(self, request):
+        user = getattr(request, "user", None)
+        if self.should_redirect(request, user):
+            return redirect("webcom:password_expired")
+        return self.get_response(request)
+
+    def should_redirect(self, request, user):
+        if not user or not user.is_authenticated or not user.is_staff:
+            return False
+        if any(request.path.startswith(path) for path in self.EXEMPT_PATHS):
+            return False
+        profile, _created = UserPasswordProfile.objects.get_or_create(user=user)
+        return profile.is_expired
 
 class RequestAuditMiddleware:
     """Records authenticated staff write activity for compliance traceability."""
@@ -88,5 +119,7 @@ class RequestAuditMiddleware:
         if forwarded_for:
             return forwarded_for.split(",")[0].strip() or None
         return request.META.get("REMOTE_ADDR") or None
+
+
 
 

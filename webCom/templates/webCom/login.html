@@ -1,4 +1,4 @@
-{% extends "webCom/public_base.html" %}
+﻿{% extends "webCom/public_base.html" %}
 
 {% block title %}Login{% endblock %}
 
@@ -10,8 +10,10 @@
             <div class="form-row full">{{ form.username.label_tag }}{{ form.username }}{{ form.username.errors }}</div>
             <div class="form-row full">{{ form.password.label_tag }}{{ form.password }}{{ form.password.errors }}</div>
             <div class="form-row full"><button class="btn primary" type="submit">Login</button></div>
+            <div class="form-row full"><a href="{% url 'webcom:forgot_password' %}">Forgot password?</a></div>
             <input type="hidden" name="next" value="{{ next }}">
         </form>
     </article>
 </section>
 {% endblock %}
+

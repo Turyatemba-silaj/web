@@ -1,5 +1,5 @@
 from django.contrib.auth import get_user_model
-from django.contrib.auth.models import Group
+from django.contrib.auth.models import Group, Permission
 from django.core.exceptions import PermissionDenied
 from django.shortcuts import redirect
 
@@ -89,6 +89,69 @@ ROLE_GROUPS = {
     },
 }
 
+ROLE_GROUPS["Head of Finance"] = {
+    "models": set(ROLE_GROUPS["Finance Officer"]["models"]),
+    "views": set(ROLE_GROUPS["Finance Officer"]["views"]),
+}
+MODEL_PERMISSION_NAMES = {
+    "attendance": "attendance",
+    "employees": "employee",
+    "guards": "guard",
+    "supervisors": "supervisor",
+    "training": "training",
+    "leaves": "leave",
+    "disciplinary-actions": "disciplinary_action",
+    "performance-evaluations": "performance_evaluation",
+    "documents": "document",
+    "salaries": "salary",
+    "advances": "advance",
+    "payroll-deductions": "payrolldeduction",
+    "clients": "client",
+    "contracts": "contract",
+    "regions": "region",
+    "sites": "site",
+    "shifts": "shift",
+    "assets": "asset",
+    "asset-assignments": "assetassignment",
+    "incidents": "incident",
+    "deployments": "deployment",
+    "deployment-areas": "deploymentarea",
+    "suppliers": "supplier",
+    "procurement-requisitions": "procurementrequisition",
+    "procurement-approvals": "procurementapproval",
+    "proforma-item-prices": "supplierproformaitemprice",
+    "supplier-proformas": "supplierproformainvoice",
+    "purchase-orders": "purchaseorder",
+    "goods-received-notes": "goodsreceivednote",
+    "supplier-invoices": "supplierinvoice",
+    "supplier-payments": "supplierpayment",
+    "procurement-notifications": "procurementnotification",
+    "invoices": "invoice",
+    "paymees": "paymee",
+    "payments": "payment",
+    "budgets": "budget",
+    "expenses": "expense",
+}
+
+ROLE_PERMISSION_ACTIONS = ("view", "add", "change", "delete")
+
+
+def role_group_permission_queryset(group_or_name):
+    group_name = getattr(group_or_name, "name", group_or_name) or ""
+    model_slugs = ROLE_GROUPS.get(group_name, {}).get("models", set())
+    model_names = [MODEL_PERMISSION_NAMES[slug] for slug in model_slugs if slug in MODEL_PERMISSION_NAMES]
+    codenames = []
+    for model_name in model_names:
+        codenames.extend(f"{action}_{model_name}" for action in ROLE_PERMISSION_ACTIONS)
+    return Permission.objects.filter(content_type__app_label="webCom", codename__in=codenames)
+
+
+def sync_role_group_permissions(group):
+    permissions = role_group_permission_queryset(group)
+    if group.name in ROLE_GROUPS or group.name == "Head of Finance":
+        group.permissions.set(permissions)
+    return permissions
+
 DEFAULT_USERS = {
     "supervisor": "Supervisor",
     "hr": "Human Resources",
@@ -110,7 +173,7 @@ def user_allowed_models(user):
     if not getattr(user, "is_authenticated", False):
         return set()
     group_names = user_group_names(user)
-    if user.is_superuser or "Head of Finance" in group_names:
+    if user.is_superuser:
         return None
     restricted_groups = group_names.intersection(ROLE_GROUPS)
     if not restricted_groups:
@@ -125,7 +188,7 @@ def user_allowed_views(user):
     if not getattr(user, "is_authenticated", False):
         return set()
     group_names = user_group_names(user)
-    if user.is_superuser or "Head of Finance" in group_names:
+    if user.is_superuser:
         return None
     restricted_groups = group_names.intersection(ROLE_GROUPS)
     if not restricted_groups:
@@ -196,9 +259,13 @@ def sync_default_role_accounts(password=DEFAULT_PASSWORD):
         if was_created or not user.has_usable_password():
             user.set_password(password)
         user.save()
+        sync_role_group_permissions(group)
         user.groups.add(group)
         if was_created:
             created.append(username)
         else:
             updated.append(username)
     return created, updated
+
+
+

@@ -12,6 +12,8 @@ urlpatterns = [
     path("", views.public_home, name="public_home"),
     path("system/health/", views.system_health, name="system_health"),
     path("staff/login/", auth_views.LoginView.as_view(template_name="webCom/login.html"), name="login"),
+    path("staff/forgot-password/", views.forgot_password, name="forgot_password"),
+    path("staff/password-expired/", views.password_expired, name="password_expired"),
     path("staff/logout/", auth_views.LogoutView.as_view(next_page="webcom:public_home"), name="logout"),
     path("who-we-are/", views.public_page, {"page": "who-we-are"}, name="who_we_are"),
     path("what-we-do/", views.public_page, {"page": "what-we-do"}, name="what_we_do"),
@@ -59,3 +61,4 @@ urlpatterns = [
     path("<str:model_name>/<int:pk>/edit/", staff_required(views.model_update), name="update"),
     path("<str:model_name>/<int:pk>/delete/", staff_required(views.model_delete), name="delete"),
 ]
+

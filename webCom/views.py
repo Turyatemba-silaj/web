@@ -8,7 +8,7 @@ from datetime import datetime, time, timedelta
 from decimal import Decimal
 
 from django.contrib import messages
-from django.contrib.auth import get_user_model
+from django.contrib.auth import get_user_model, update_session_auth_hash
 from django.db import DatabaseError, connection, models, transaction
 from django.conf import settings
 from django.core.exceptions import PermissionDenied, ValidationError
@@ -56,7 +56,10 @@ from .forms import (
     PatrolLogForm,
     PaymeeForm,
     PayrollDeductionForm,
+    AdminUserCreationForm,
+    PasswordExpiredChangeForm,
     PasswordResetManagementForm,
+    ForgotPasswordResetForm,
     PaymentForm,
     SupplierForm,
     ProcurementRequisitionForm,
@@ -84,9 +87,12 @@ from .access import (
     require_model_access,
     user_allowed_models,
     require_view_access,
+    role_group_permission_queryset,
 )
 from .models import (
     Advance,
+    AuditLog,
+    UserPasswordProfile,
     Asset,
     AssetAssignment,
     Attendance,
@@ -143,6 +149,7 @@ from .models import (
 
 
 MODEL_CONFIGS = {
+    "audit-logs": {"model": AuditLog, "form": None, "title": "Audit Logs", "icon": "AL", "fields": ["audit_id", "created_at", "username", "action", "method", "status_code", "path", "ip_address"], "detail_fields": ["audit_id", "user", "username", "action", "path", "method", "status_code", "ip_address", "user_agent", "created_at"], "managed_table": True, "managed_message": "Audit logs are captured automatically from staff activity."},
     "website-adverts": {"model": WebsiteAdvertisement, "form": WebsiteAdvertisementForm, "title": "Website Adverts", "icon": "WA", "fields": ["title", "placement", "starts_on", "ends_on", "is_active"], "detail_fields": ["title", "placement", "message", "call_to_action", "target_url", "starts_on", "ends_on", "is_active", "created_at", "updated_at"], "required_only": False},
     "company-events": {"model": CompanyEvent, "form": CompanyEventForm, "title": "Company Events", "icon": "CE", "fields": ["title", "event_date", "location", "is_public"], "detail_fields": ["title", "event_date", "location", "summary", "is_public", "created_at", "updated_at"], "required_only": False},
     "website-resources": {"model": WebsiteResource, "form": WebsiteResourceForm, "title": "Website Resources", "icon": "WR", "fields": ["title", "resource_type", "url", "is_public"], "detail_fields": ["title", "resource_type", "summary", "url", "is_public", "created_at", "updated_at"], "required_only": False},
@@ -152,7 +159,7 @@ MODEL_CONFIGS = {
     "clients": {"model": Client, "form": ClientForm, "title": "Clients", "icon": "CL", "fields": ["client_id", "client_name", "contact_person", "phone_number", "email"], "detail_fields": ["client_id", "client_name", "contact_person", "phone_number", "email", "address"]},
     "contracts": {"model": Contract, "form": ContractForm, "title": "Contracts", "icon": "CT", "fields": ["contract_id", "contract_number", "client", "client_name", "day_shift_guards", "night_shift_guards", "number_of_guards", "rate_per_guard", "contract_value"], "detail_fields": ["contract_id", "contract_number", "client", "client_name", "contact_person", "phone_number", "email", "address", "contract_start_date", "contract_end_date", "number_of_sites", "day_shift_guards", "night_shift_guards", "number_of_guards", "rate_per_guard", "guard_contract_value", "deliverables_value", "contract_value", "contract_status"]},
     "regions": {"model": Region, "form": RegionForm, "title": "Regions", "icon": "RG", "fields": ["region_id", "region_name", "description"], "required_only": False},
-    "sites": {"model": Site, "form": SiteForm, "title": "Sites", "icon": "ST", "fields": ["region", "client", "contract", "site_name", "site_address", "day_shift_guards", "night_shift_guards", "number_of_guards"], "detail_fields": ["region", "client", "contract", "site_name", "site_address", "day_shift_guards", "night_shift_guards", "number_of_guards"], "required_only": False},
+    "sites": {"model": Site, "form": SiteForm, "title": "Sites", "icon": "ST", "fields": ["site_id", "region", "client", "contract", "site_name", "site_address", "day_shift_guards", "night_shift_guards", "number_of_guards"], "detail_fields": ["site_id", "region", "client", "contract", "site_name", "site_address", "day_shift_guards", "night_shift_guards", "number_of_guards"], "required_only": False},
     "shifts": {"model": Shift, "form": ShiftForm, "title": "Shifts", "icon": "SH", "fields": ["shift_type", "start_time", "end_time", "hours_per_shift"]},
     "assets": {"model": Asset, "form": AssetForm, "title": "Assets", "icon": "AS", "fields": ["asset_type", "asset_name", "asset_number", "quantity"]},
     "asset-assignments": {"model": AssetAssignment, "form": AssetAssignmentForm, "title": "Asset Assignments", "icon": "AA", "fields": ["asset", "quantity", "assigned_to", "site", "deployment", "status"]},
@@ -206,8 +213,8 @@ MODULE_GROUPS = {
 }
 
 DEPARTMENTS = [
-    {"name": "Operations", "items": ["clients", "contracts", "sites", "shifts", "assets", "asset-assignments", "incidents", "deployments"]},
-    {"name": "Human Resources", "items": ["employees", "training", "attendance", "leaves", "disciplinary-actions", "performance-evaluations", "documents"]},
+    {"name": "Operations", "items": ["clients", "contracts", "sites", "shifts", "assets", "asset-assignments", "incidents", "deployments", "attendance"]},
+    {"name": "Human Resources", "items": ["employees", "training", "leaves", "disciplinary-actions", "performance-evaluations", "documents"]},
     {"name": "Finance", "items": ["payroll", "procurement", "invoices", "paymees", "payments", "budgets", "expenses"]},
 ]
 
@@ -485,21 +492,49 @@ def _matched_employee_for_user(user, by_email, by_employee_number):
     return None
 
 
+def password_profile_for(user):
+    profile, _created = UserPasswordProfile.objects.get_or_create(user=user)
+    return profile
+
+
+def password_status_for(user):
+    profile = password_profile_for(user)
+    if profile.force_password_change:
+        return "Reset required"
+    if profile.is_expired:
+        return "Expired"
+    if profile.days_until_expiry <= 14:
+        return "Expiring soon"
+    return "Current"
+
 def _password_management_rows():
     User = get_user_model()
     by_email, by_employee_number = _employee_account_maps()
     rows = []
-    users = User.objects.prefetch_related("groups").order_by("username")
+    users = User.objects.prefetch_related("groups__permissions", "user_permissions").filter(Q(username__iexact="Trans") | Q(first_name__iexact="Namakula", last_name__iexact="Jenifah")).order_by("id")
     for user in users:
         employee = _matched_employee_for_user(user, by_email, by_employee_number)
-        groups = ", ".join(group.name for group in user.groups.all()) or "No group"
+        groups = ", ".join(group.name for group in user.groups.all()) or "No role group"
+        permission_names = sorted({
+            permission.name
+            for group in user.groups.all()
+            for permission in group.permissions.all()
+        } | {permission.name for permission in user.user_permissions.all()})
+        permissions = f"{len(permission_names)} permission{'s' if len(permission_names) != 1 else ''}" if permission_names else "No permission assigned"
+        profile = password_profile_for(user)
         rows.append(
             {
                 "user": user,
                 "groups": groups,
+                "permissions": permissions,
                 "employee": employee,
                 "employee_status": employee.get_status_display() if employee else "No linked employee",
                 "is_terminated_staff": bool(employee and employee.status == "terminated"),
+                "password_profile": profile,
+                "password_status": password_status_for(user),
+                "password_changed_at": profile.password_changed_at,
+                "password_expires_at": profile.expires_at,
+                "password_days_left": profile.days_until_expiry,
             }
         )
     return rows
@@ -523,6 +558,8 @@ def password_management(request):
     if not request.user.is_superuser:
         raise PermissionDenied("Only system administrators can manage staff account access.")
 
+    create_user_form = AdminUserCreationForm()
+
     if request.method == "POST" and request.POST.get("action") == "deactivate_terminated":
         changed = _deactivate_terminated_staff_accounts()
         if changed:
@@ -531,16 +568,34 @@ def password_management(request):
             messages.info(request, "No active Django user accounts matched terminated staff records.")
         return redirect("webcom:password_management")
 
+    if request.method == "POST" and request.POST.get("action") == "create_user":
+        create_user_form = AdminUserCreationForm(request.POST)
+        if create_user_form.is_valid():
+            new_user = create_user_form.save()
+            password_profile_for(new_user).mark_changed(admin_reset=True, force_change=True)
+            messages.success(request, f"Created user {new_user.username}. Temporary password must be changed at first login.")
+            return redirect("webcom:password_management")
+        messages.error(request, "User account was not created. Review the highlighted fields.")
+
+    role_permission_options = {}
+    for group in create_user_form.fields["groups"].queryset:
+        permissions = role_group_permission_queryset(group).select_related("content_type").order_by("content_type__model", "codename")
+        role_permission_options[str(group.pk)] = [
+            {"value": str(permission.pk), "label": create_user_form.permission_label(permission)}
+            for permission in permissions
+        ]
+
     rows = _password_management_rows()
     context = {
         "rows": rows,
+        "create_user_form": create_user_form,
+        "role_permission_options": role_permission_options,
         "total_users": len(rows),
         "active_users": sum(1 for row in rows if row["user"].is_active),
         "blocked_users": sum(1 for row in rows if not row["user"].is_active),
         "terminated_staff_accounts": sum(1 for row in rows if row["is_terminated_staff"]),
     }
     return render_page(request, "webCom/password_management.html", context, "password-management")
-
 
 def password_management_action(request, user_id):
     if not request.user.is_superuser:
@@ -573,7 +628,8 @@ def password_management_action(request, user_id):
         if form.is_valid():
             managed_user.set_password(form.cleaned_data["new_password"])
             managed_user.save(update_fields=["password"])
-            messages.success(request, f"Password reset for {managed_user.username}.")
+            password_profile_for(managed_user).mark_changed(admin_reset=True, force_change=True)
+            messages.success(request, f"Temporary password set for {managed_user.username}. The user must change it at next login.")
         else:
             errors = "; ".join(error for field_errors in form.errors.values() for error in field_errors)
             messages.error(request, f"Password reset failed for {managed_user.username}: {errors}")
@@ -581,6 +637,45 @@ def password_management_action(request, user_id):
         messages.error(request, "Unknown account management action.")
 
     return redirect("webcom:password_management")
+
+def password_expired(request):
+    if not request.user.is_authenticated:
+        return redirect("webcom:login")
+    profile = password_profile_for(request.user)
+    form = PasswordExpiredChangeForm(request.POST or None, user=request.user)
+    if request.method == "POST" and form.is_valid():
+        request.user.set_password(form.cleaned_data["new_password"])
+        request.user.save(update_fields=["password"])
+        profile.mark_changed(force_change=False)
+        update_session_auth_hash(request, request.user)
+        messages.success(request, "Your password has been updated.")
+        return redirect("webcom:home")
+    context = {
+        "form": form,
+        "profile": profile,
+        "title": "Password Reset Required",
+    }
+    return render(request, "webCom/password_expired.html", context)
+
+
+def forgot_password(request):
+    User = get_user_model()
+    matched_user = None
+    if request.method == "POST":
+        username = (request.POST.get("username") or "").strip()
+        email = (request.POST.get("email") or "").strip().lower()
+        matched_user = User.objects.filter(username=username, email__iexact=email, is_active=True).first()
+    form = ForgotPasswordResetForm(request.POST or None, user=matched_user)
+    if request.method == "POST":
+        if not matched_user:
+            form.add_error(None, "No active account matched that username and email.")
+        elif form.is_valid():
+            matched_user.set_password(form.cleaned_data["new_password"])
+            matched_user.save(update_fields=["password"])
+            password_profile_for(matched_user).mark_changed(force_change=False)
+            messages.success(request, "Password reset successfully. You can sign in with the new password.")
+            return redirect("webcom:login")
+    return render(request, "webCom/forgot_password.html", {"form": form, "title": "Forgot Password"})
 
 def public_site_context():
     today = timezone.localdate()
@@ -940,22 +1035,37 @@ def site_roster_staff(site, work_date):
         ).order_by("employee_number", "first_name", "last_name")
     )
 
-def load_site_scheduled_guards(site, required_count):
-    if required_count <= 0:
-        return
+def load_site_scheduled_guards(site, required_count, work_date):
+    if required_count <= 0 or not site or not site.region_id or not work_date:
+        return 0
     required_count = relief_guard_capacity(required_count)
-    assigned_count = site.guards.filter(role="guard", status="active").count()
+    assigned_count = site.guards.filter(role__in=("guard", "supervisor"), status="active").count()
     if assigned_count >= required_count:
-        return
-    needed = required_count - assigned_count
-    available_guards = (
-        Employee.objects.filter(role="guard", status="active")
-        .exclude(assigned_sites=site)
-        .order_by("first_name", "last_name")[:needed]
-    )
-    if available_guards:
-        site.guards.add(*available_guards)
+        return 0
 
+    needed = required_count - assigned_count
+    assigned_elsewhere = Employee.objects.filter(
+        assigned_sites__isnull=False,
+        is_reliever=False,
+    ).exclude(assigned_sites=site)
+    available_guards = (
+        Employee.objects.filter(
+            role__in=("guard", "supervisor"),
+            status="active",
+            deployment_areas__region=site.region,
+            deployment_areas__status="active",
+            deployment_areas__start_date__lte=work_date,
+        )
+        .filter(Q(deployment_areas__end_date__isnull=True) | Q(deployment_areas__end_date__gte=work_date))
+        .exclude(pk__in=assigned_elsewhere.values("pk"))
+        .exclude(assigned_sites=site)
+        .distinct()
+        .order_by("employee_number", "first_name", "last_name")[:needed]
+    )
+    guards_to_add = list(available_guards)
+    if guards_to_add:
+        site.guards.add(*guards_to_add)
+    return len(guards_to_add)
 
 def refresh_budget_audit_notifications():
     """Refresh budget accountability alerts for screens that audit finance records."""
@@ -1824,12 +1934,22 @@ def model_list(request, model_name):
                 .filter(Q(end_date__isnull=True) | Q(end_date__gte=mark_day))
                 .order_by("shift__start_time", "shift__shift_type")
             )
+            if deployments.exists():
+                required_slots = 0
+                for deployment in deployments:
+                    for shift_type in deployment.covered_shift_types:
+                        required_slots += selected_site.day_shift_guards if shift_type == "day" else selected_site.night_shift_guards
+                added_count = load_site_scheduled_guards(selected_site, required_slots, mark_day)
+                if added_count:
+                    selected_site.refresh_from_db()
+                    messages.info(request, f"{added_count} eligible guard(s) were assigned to this site roster automatically.")
+
             site_guards = site_roster_staff(selected_site, mark_day)
             guard_choices = Employee.objects.filter(pk__in=[employee.pk for employee in site_guards]).order_by("first_name", "last_name")
             if not deployments.exists():
                 attendance_hint = "No active deployment covers this site on the selected date. Create a deployment for this site, shift, and date range."
             elif not site_guards:
-                attendance_hint = "This site has no assigned guards or supervisors. Assign staff directly to this site before marking attendance."
+                attendance_hint = "No eligible guards are available for this site/date. Add active guard deployment areas for this site's region or assign guards directly to the site."
             attendance_records = {
                 (attendance.deployment_id, attendance.scheduled_guard_id, attendance.shift.shift_type if attendance.shift_id else None): attendance
                 for attendance in Attendance.objects.select_related("attended_guard", "scheduled_guard", "shift")
@@ -1915,7 +2035,7 @@ def model_list(request, model_name):
     if model_name == "paymees":
         sync_receivables_from_payments()
 
-    objects = config["model"].objects.all().order_by(*config.get("ordering", ["-pk"]))
+    objects = config["model"].objects.all().order_by(config["model"]._meta.pk.name)
     context = {
         "model_name": model_name,
         "title": config["title"],
@@ -3260,6 +3380,19 @@ def model_create(request, model_name):
             "submit_label": "Save Proforma",
         }
         return render_page(request, "webCom/model_form.html", context, model_name)
+    if model_name == "deployments":
+        form = config["form"](request.POST or None, request.FILES or None, required_only=False)
+        if request.method == "POST" and form.is_valid():
+            deployment = form.save()
+            messages.success(request, "Deployment saved successfully.")
+            return redirect("webcom:detail", model_name=model_name, pk=deployment.pk)
+        context = {
+            "model_name": model_name,
+            "title": "Add Deployment",
+            "form": form,
+            "submit_label": "Save Deployment",
+        }
+        return render_page(request, "webCom/model_form.html", context, model_name)
     if model_name == "performance-evaluations":
         form = config["form"](request.POST or None, request.FILES or None, required_only=False)
         if request.method == "POST" and form.is_valid():
@@ -3534,3 +3667,24 @@ def incident_report(request):
         "severity_counts": [(dict(Incident.SEVERITY_LEVEL_CHOICES).get(key, key), count) for key, count in severity_counts.items()],
     }
     return render_page(request, "webCom/incident_report.html", context, "incidents")
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
