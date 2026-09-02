@@ -421,6 +421,17 @@ class Leave(models.Model):
     start_date = models.DateField()
     end_date = models.DateField()
     reason = models.TextField()
+    address_while_away = models.CharField(max_length=255, blank=True, default='')
+    emergency_contact = models.CharField(max_length=120, blank=True, default='')
+    hr_verifier = models.ForeignKey(Employee, on_delete=models.SET_NULL, null=True, blank=True, related_name='hr_verified_leave_applications')
+    supervisor = models.ForeignKey(Employee, on_delete=models.SET_NULL, null=True, blank=True, related_name='supervised_leave_applications')
+    hod = models.ForeignKey(Employee, on_delete=models.SET_NULL, null=True, blank=True, related_name='hod_leave_applications')
+    stand_in_coworker = models.ForeignKey(Employee, on_delete=models.SET_NULL, null=True, blank=True, related_name='stand_in_leave_applications')
+    APPLICATION_STATUS_CHOICES = [
+        ('draft', 'Draft'),
+        ('submitted', 'Submitted'),
+    ]
+    application_status = models.CharField(max_length=20, choices=APPLICATION_STATUS_CHOICES, default='submitted')
     
     APPROVAL_STATUS_CHOICES = [
         ('pending', 'Pending'),
@@ -483,11 +494,84 @@ class Leave(models.Model):
         self.save()
         return self
 
+    def notify(self, recipient, recipient_group, notification_type, message):
+        notification_model = globals().get("LeaveNotification")
+        if not notification_model or not recipient or not self.pk:
+            return None
+        notification, _created = notification_model.objects.get_or_create(
+            leave=self,
+            recipient=recipient,
+            recipient_group=recipient_group,
+            notification_type=notification_type,
+            defaults={
+                "message": message,
+                "status": "pending",
+                "notified_at": timezone.now(),
+            },
+        )
+        return notification
+
+    def notify_submission(self):
+        if self.application_status != "submitted" or not self.pk:
+            return
+        message = f"{self.employee} submitted {self.get_leave_type_display()} from {self.start_date} to {self.end_date}."
+        self.notify(self.supervisor, "Verifier", "verification_requested", message)
+        self.notify(self.hod, "Approver", "approval_requested", message)
+        self.notify(self.hr_verifier, "Approver", "approval_requested", message)
+        self.notify(self.stand_in_coworker, "Stand-In", "coverage_notice", f"{self.employee} listed you as stand-in coworker for leave from {self.start_date} to {self.end_date}.")
+
     def __str__(self):
         return f"{self.employee} - {self.leave_type}"
 
     class Meta:
         db_table = 'leaves'
+
+
+class LeaveNotification(models.Model):
+    """Actionable leave workflow notification for verifiers and approvers."""
+    notification_id = models.AutoField(primary_key=True)
+    leave = models.ForeignKey(Leave, on_delete=models.CASCADE, related_name='notifications')
+    recipient = models.ForeignKey(Employee, on_delete=models.CASCADE, related_name='leave_notifications')
+    recipient_group = models.CharField(max_length=50)
+    NOTIFICATION_TYPE_CHOICES = [
+        ('verification_requested', 'Verification Requested'),
+        ('approval_requested', 'Approval Requested'),
+        ('coverage_notice', 'Coverage Notice'),
+        ('leave_verified', 'Leave Verified'),
+        ('leave_approved', 'Leave Approved'),
+        ('leave_rejected', 'Leave Rejected'),
+    ]
+    notification_type = models.CharField(max_length=40, choices=NOTIFICATION_TYPE_CHOICES)
+    message = models.TextField()
+    STATUS_CHOICES = [('pending', 'Pending'), ('read', 'Read'), ('actioned', 'Actioned')]
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending')
+    decision = models.CharField(max_length=20, blank=True, default='')
+    decided_at = models.DateTimeField(blank=True, null=True)
+    notified_at = models.DateTimeField(default=timezone.now)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    @property
+    def can_verify(self):
+        return self.recipient_group == 'Verifier' and self.leave.operations_verification_status == 'pending'
+
+    @property
+    def can_approve(self):
+        return self.recipient_group == 'Approver' and self.leave.operations_verification_status == 'verified' and self.leave.approval_status == 'pending'
+
+    @property
+    def can_reject(self):
+        return self.recipient_group in ('Verifier', 'Approver') and self.leave.approval_status == 'pending'
+
+    def __str__(self):
+        return f"{self.get_notification_type_display()} - {self.recipient}"
+
+    class Meta:
+        db_table = 'leave_notifications'
+        ordering = ['-notified_at', '-notification_id']
+        constraints = [
+            models.UniqueConstraint(fields=['leave', 'recipient', 'recipient_group', 'notification_type'], name='unique_leave_notification')
+        ]
 
 
 class Disciplinary_Action(models.Model):

@@ -4,112 +4,187 @@
 {% block title %}Dashboard{% endblock %}
 
 {% block content %}
-<section class="ops-dashboard-hero">
-    <div>
-        <p class="eyebrow">Operations Command</p>
-        <h1>Dashboard</h1>
-    </div>
-    <div class="ops-hero-actions">
-        <a class="btn primary" href="{% url 'webcom:create' 'incidents' %}">Record Incident</a>
-        <a class="btn" href="{% url 'webcom:create' 'deployments' %}">New Deployment</a>
-        <a class="btn" href="{% url 'webcom:create' 'payments' %}">Record Payment</a>
-    </div>
-</section>
-
-<section class="ops-kpi-grid">
-    {% for card in summary_cards %}
-        <article class="ops-kpi {{ card.accent }}">
-            <div class="ops-kpi-label">{{ card.label }}</div>
-            <div class="ops-kpi-value">{{ card.value|thousands }}</div>
-            <p>{{ card.caption }}</p>
-        </article>
-    {% endfor %}
-</section>
-
-<section class="analysis-strip">
-    {% for card in analysis_cards %}
-        <article class="analysis-tile">
-            <span>{{ card.label }}</span>
-            <strong>{{ card.value|thousands }}</strong>
-            <p>{{ card.note }}</p>
-        </article>
-    {% endfor %}
-</section>
-
-<section class="chart-dashboard-grid">
-    <article class="visual-panel pie-panel">
-        <div class="section-heading-row">
-            <div>
-                <h2>Department Record Mix</h2>
+<section class="command-dashboard">
+    <div class="command-hero">
+        <div class="command-copy">
+            <span class="command-kicker">Operations Command</span>
+            <h1>Dashboard</h1>
+            <p>Live operating picture across clients, deployments, staff, incidents, finance, and approvals.</p>
+            <div class="command-badges">
+                <span>{{ summary_cards.1.value|thousands }} active clients</span>
+                <span>{{ summary_cards.2.value|thousands }} active staff</span>
+                <span>{{ summary_cards.3.value|thousands }} open incidents</span>
             </div>
         </div>
-        <div class="pie-chart-layout">
-            <div class="pie-chart" style="background: {{ department_pie_style }}"><span></span></div>
-            <div class="chart-legend">
-                {% for item in department_pie %}
-                    <div class="legend-row">
-                        <i style="background: {{ item.color }}"></i>
-                        <strong>{{ item.label }}</strong>
-                        <span>{{ item.value|thousands }} / {{ item.percent }}%</span>
-                    </div>
+        <div class="command-actions">
+            {% for action in quick_actions %}
+                <a class="command-action {{ action.tone }}" href="{% url action.url_name action.model %}">
+                    <span>{{ action.icon }}</span>
+                    <strong>{{ action.label }}</strong>
+                </a>
+            {% endfor %}
+        </div>
+    </div>
+
+    <div class="command-kpi-grid">
+        {% for card in summary_cards %}
+            <article class="command-kpi {{ card.accent }}">
+                <span>{{ card.label }}</span>
+                <strong>{{ card.value|thousands }}</strong>
+                <small>{{ card.caption }}</small>
+            </article>
+        {% endfor %}
+    </div>
+
+    <section class="command-main-grid">
+        <div class="command-primary">
+            <div class="health-grid">
+                {% for card in analysis_cards %}
+                    <article class="health-card {{ card.tone }}">
+                        <div>
+                            <span>{{ card.label }}</span>
+                            <strong>{{ card.value|thousands }}</strong>
+                        </div>
+                        <div class="health-track"><i style="width: {{ card.progress }}%"></i></div>
+                        <p>{{ card.note }}</p>
+                    </article>
                 {% endfor %}
             </div>
-        </div>
-    </article>
 
-    <article class="visual-panel pie-panel">
-        <div class="section-heading-row">
-            <div>
-                <h2>Incident Severity Mix</h2>
-            </div>
-        </div>
-        <div class="pie-chart-layout">
-            <div class="pie-chart" style="background: {{ severity_pie_style }}"><span></span></div>
-            <div class="chart-legend">
-                {% for item in severity_pie %}
-                    <div class="legend-row">
-                        <i style="background: {{ item.color }}"></i>
-                        <strong>{{ item.label }}</strong>
-                        <span>{{ item.value|thousands }} / {{ item.percent }}%</span>
+            <article class="dashboard-panel">
+                <div class="panel-head">
+                    <div>
+                        <span>Records</span>
+                        <h2>Department Mix</h2>
                     </div>
-                {% endfor %}
-            </div>
-        </div>
-    </article>
-
-    <article class="visual-panel cluster-panel">
-        <div class="section-heading-row">
-            <div>
-                <h2>Finance And Budget Comparison</h2>
-            </div>
-        </div>
-        <div class="cluster-chart">
-            {% for group in clustered_bars %}
-                <div class="cluster-group">
-                    <div class="cluster-bars">
-                        {% for bar in group.bars %}
-                            <div class="cluster-bar-wrap">
-                                <span>UGX {{ bar.value|thousands }}</span>
-                                <div class="cluster-bar {{ bar.tone }}" style="height: {{ bar.height }}%"></div>
-                                <small>{{ bar.label }}</small>
+                </div>
+                <div class="mix-layout">
+                    <div class="pie-chart command-donut" style="background: {{ department_pie_style }}"><span></span></div>
+                    <div class="mix-list">
+                        {% for item in department_pie %}
+                            <div class="mix-row">
+                                <i style="background: {{ item.color }}"></i>
+                                <strong>{{ item.label }}</strong>
+                                <span>{{ item.value|thousands }} records</span>
+                                <div class="mini-track"><b style="width: {{ item.percent }}%; background: {{ item.color }}"></b></div>
                             </div>
                         {% endfor %}
                     </div>
-                    <strong>{{ group.label }}</strong>
                 </div>
-            {% endfor %}
-        </div>
-    </article>
+            </article>
 
-    <article class="visual-panel trend-panel">
-        <div class="section-heading-row">
+            <article class="dashboard-panel">
+                <div class="panel-head">
+                    <div>
+                        <span>Finance</span>
+                        <h2>Invoice, Collection, And Budget</h2>
+                    </div>
+                </div>
+                <div class="cluster-chart command-bars">
+                    {% for group in clustered_bars %}
+                        <div class="cluster-group">
+                            <div class="cluster-bars">
+                                {% for bar in group.bars %}
+                                    <div class="cluster-bar-wrap">
+                                        <span>UGX {{ bar.value|thousands }}</span>
+                                        <div class="cluster-bar {{ bar.tone }}" style="height: {{ bar.height }}%"></div>
+                                        <small>{{ bar.label }}</small>
+                                    </div>
+                                {% endfor %}
+                            </div>
+                            <strong>{{ group.label }}</strong>
+                        </div>
+                    {% endfor %}
+                </div>
+            </article>
+        </div>
+
+        <aside class="command-side">
+            <article class="dashboard-panel">
+                <div class="panel-head">
+                    <div>
+                        <span>Attention</span>
+                        <h2>Work Queue</h2>
+                    </div>
+                </div>
+                <div class="queue-list">
+                    {% for item in queue_cards %}
+                        <a class="queue-item {{ item.tone }}" href="{% url 'webcom:list' item.href %}">
+                            <span>{{ item.value|thousands }}</span>
+                            <div>
+                                <strong>{{ item.label }}</strong>
+                                <small>{{ item.caption }}</small>
+                            </div>
+                        </a>
+                    {% endfor %}
+                </div>
+            </article>
+
+            <article class="dashboard-panel">
+                <div class="panel-head">
+                    <div>
+                        <span>Risk</span>
+                        <h2>Incident Severity</h2>
+                    </div>
+                </div>
+                <div class="severity-block">
+                    <div class="pie-chart mini-donut" style="background: {{ severity_pie_style }}"><span></span></div>
+                    <div class="chart-legend compact-legend">
+                        {% for item in severity_pie %}
+                            <div class="legend-row">
+                                <i style="background: {{ item.color }}"></i>
+                                <strong>{{ item.label }}</strong>
+                                <span>{{ item.value|thousands }} / {{ item.percent }}%</span>
+                            </div>
+                        {% endfor %}
+                    </div>
+                </div>
+            </article>
+
+            <article class="dashboard-panel">
+                <div class="panel-head">
+                    <div>
+                        <span>Recent</span>
+                        <h2>Latest Activity</h2>
+                    </div>
+                </div>
+                <div class="activity-feed">
+                    {% for incident in recent_incidents %}
+                        <a href="{% url 'webcom:detail' 'incidents' incident.pk %}">
+                            <span>IN</span>
+                            <div>
+                                <strong>{{ incident.get_incident_type_display }}</strong>
+                                <small>{{ incident.site|default:"No site" }} - {{ incident.date_time|date:"M d, H:i" }}</small>
+                            </div>
+                        </a>
+                    {% empty %}
+                        <p class="muted">No recent incidents.</p>
+                    {% endfor %}
+                    {% for payment in recent_payments %}
+                        <a href="{% url 'webcom:detail' 'payments' payment.pk %}">
+                            <span>UGX</span>
+                            <div>
+                                <strong>{{ payment.amount|thousands }}</strong>
+                                <small>{{ payment.invoice.client }} - {{ payment.payment_date|date:"M d" }}</small>
+                            </div>
+                        </a>
+                    {% empty %}
+                    {% endfor %}
+                </div>
+            </article>
+        </aside>
+    </section>
+
+    <article class="dashboard-panel trend-panel">
+        <div class="panel-head">
             <div>
+                <span>Movement</span>
                 <h2>Seven-Day Trends</h2>
             </div>
         </div>
         <div class="trend-grid">
             {% for chart in trend_charts %}
-                <section class="trend-card">
+                <section class="trend-card command-trend">
                     <div>
                         <h3>{{ chart.title }}</h3>
                         <p class="muted">{{ chart.subtitle }}</p>
@@ -129,8 +204,4 @@
         </div>
     </article>
 </section>
-
 {% endblock %}
-
-
-

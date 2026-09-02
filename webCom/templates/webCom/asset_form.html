@@ -1,0 +1,153 @@
+{% extends "webCom/base.html" %}
+
+{% block title %}{{ title }}{% endblock %}
+
+{% block content %}
+<style>
+    .asset-form-card {
+        background: #ffffff;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        box-shadow: 0 12px 34px rgba(15, 23, 42, 0.08);
+        overflow: hidden;
+    }
+    .asset-form-head {
+        display: flex;
+        justify-content: space-between;
+        gap: 12px;
+        align-items: center;
+        padding: 14px 16px;
+        border-bottom: 1px solid var(--line);
+        background: #f8fafc;
+    }
+    .asset-form-head h1 { font-size: 20px; }
+    .asset-form-body { padding: 16px; }
+    .asset-section-title {
+        margin: 4px 0 12px;
+        color: #0f766e;
+        font-size: 12px;
+        font-weight: 800;
+        text-transform: uppercase;
+    }
+    .asset-type-grid {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 12px;
+    }
+    .asset-field {
+        min-width: 0;
+        display: flex;
+        flex-direction: column;
+        gap: 5px;
+    }
+    .asset-field label {
+        margin: 0;
+        color: #102a43;
+        font-size: 13px;
+    }
+    .asset-field input,
+    .asset-field select,
+    .asset-field textarea {
+        width: 100%;
+        max-width: none;
+        min-height: 38px;
+        font-size: 14px;
+    }
+    .asset-field textarea { min-height: 86px; }
+    .asset-field.wide { grid-column: span 2; }
+    .asset-field.full { grid-column: 1 / -1; }
+    .asset-field[hidden] { display: none; }
+    .asset-form-actions {
+        display: flex;
+        justify-content: flex-end;
+        gap: 8px;
+        padding: 12px 16px;
+        border-top: 1px solid var(--line);
+        background: #ffffff;
+    }
+    @media (max-width: 900px) {
+        .asset-type-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+        .asset-field.wide { grid-column: span 2; }
+    }
+    @media (max-width: 620px) {
+        .asset-form-head { align-items: flex-start; flex-direction: column; }
+        .asset-type-grid { grid-template-columns: 1fr; }
+        .asset-field.wide { grid-column: 1; }
+        .asset-form-actions { justify-content: flex-start; flex-wrap: wrap; }
+    }
+</style>
+
+<div class="asset-form-card">
+    <div class="asset-form-head">
+        <div>
+            <p class="eyebrow">Asset Register</p>
+            <h1>{{ title }}</h1>
+        </div>
+        <div class="actions">
+            <a class="btn" href="{% url 'webcom:list' model_name %}">Cancel</a>
+        </div>
+    </div>
+
+    <form method="post" enctype="multipart/form-data" novalidate data-asset-form>
+        {% csrf_token %}
+        <div class="asset-form-body">
+            {{ form.non_field_errors }}
+            {% for hidden in form.hidden_fields %}{{ hidden }}{% endfor %}
+            <div class="asset-section-title" data-asset-section-title>Choose Asset Type</div>
+            <div class="asset-type-grid">
+                {% for field in form.visible_fields %}
+                    <div class="asset-field {% if field.name == 'notes' %}full{% elif field.name == 'storage_location' %}wide{% endif %}" data-asset-field="{{ field.name }}">
+                        {{ field.label_tag }}
+                        {{ field }}
+                        {{ field.errors }}
+                    </div>
+                {% endfor %}
+            </div>
+        </div>
+        <div class="asset-form-actions">
+            <button class="btn primary" type="submit">{{ submit_label|default:"Save Asset" }}</button>
+            <a class="btn" href="{% url 'webcom:list' model_name %}">Close</a>
+        </div>
+    </form>
+</div>
+
+<script>
+    (function () {
+        const form = document.querySelector("[data-asset-form]");
+        if (!form) return;
+        const typeField = form.querySelector("[name$='asset_type']");
+        const title = form.querySelector("[data-asset-section-title]");
+        const groups = {
+            vehicle: ["asset_type", "asset_name", "make", "model", "engine_number", "chassis_number", "number_plate", "color", "condition", "storage_location", "quantity", "notes"],
+            equipment: ["asset_type", "asset_name", "make", "model", "asset_number", "condition", "storage_location", "quantity", "notes"],
+            uniform: ["asset_type", "asset_name", "color", "size", "condition", "storage_location", "quantity", "notes"],
+            gun: ["asset_type", "make", "asset_name", "model", "asset_number", "police_number", "condition", "storage_location", "quantity", "notes"],
+            weapon: ["asset_type", "asset_name", "make", "model", "asset_number", "police_number", "condition", "storage_location", "quantity", "notes"],
+            other: ["asset_type", "asset_name", "asset_number", "make", "model", "condition", "storage_location", "quantity", "notes"]
+        };
+        const labels = {
+            vehicle: "Vehicle Details",
+            equipment: "Equipment Details",
+            uniform: "Uniform Details",
+            gun: "Gun Details",
+            weapon: "Weapon Details",
+            other: "Other Asset Details"
+        };
+
+        function syncFields() {
+            const assetType = typeField ? typeField.value : "";
+            const activeFields = new Set(groups[assetType] || ["asset_type"]);
+            document.querySelectorAll("[data-asset-field]").forEach(function (field) {
+                const fieldName = field.getAttribute("data-asset-field");
+                field.hidden = !activeFields.has(fieldName);
+            });
+            if (title) title.textContent = labels[assetType] || "Choose Asset Type";
+        }
+
+        if (typeField) {
+            typeField.addEventListener("change", syncFields);
+            syncFields();
+        }
+    })();
+</script>
+{% endblock %}

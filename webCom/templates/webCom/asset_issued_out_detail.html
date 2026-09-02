@@ -1,0 +1,113 @@
+{% extends "webCom/base.html" %}
+{% load format_values %}
+
+{% block title %}{{ title }}{% endblock %}
+
+{% block content %}
+<style>
+    .issued-summary-grid {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(150px, 1fr));
+        gap: 12px;
+        margin-bottom: 16px;
+    }
+    .issued-summary-card {
+        border: 1px solid var(--line);
+        background: #ffffff;
+        padding: 14px;
+    }
+    .issued-summary-card span {
+        display: block;
+        color: var(--muted);
+        font-size: 12px;
+        font-weight: 800;
+        text-transform: uppercase;
+        margin-bottom: 8px;
+    }
+    .issued-summary-card strong {
+        display: block;
+        color: var(--text);
+        font-size: 28px;
+        line-height: 1;
+    }
+    @media (max-width: 760px) {
+        .issued-summary-grid {
+            grid-template-columns: 1fr;
+        }
+    }
+</style>
+
+<div class="topbar">
+    <div>
+        <h1>{{ title }}</h1>
+    </div>
+    <div class="actions">
+        <a class="btn" href="{% url 'webcom:list' 'assets' %}">Assets</a>
+        <a class="btn" href="{% url 'webcom:asset_group_detail' %}?{{ group.group_query }}">Group Details</a>
+        <a class="btn primary" href="{% url 'webcom:list' 'asset-assignments' %}">Asset Accountability</a>
+    </div>
+</div>
+
+<div class="issued-summary-grid">
+    <div class="issued-summary-card">
+        <span>Store Quantity</span>
+        <strong>{{ group.quantity|thousands }}</strong>
+    </div>
+    <div class="issued-summary-card">
+        <span>Assets Issued Out</span>
+        <strong>{{ group.assets_issued_out|thousands }}</strong>
+    </div>
+    <div class="issued-summary-card">
+        <span>Stock Balance</span>
+        <strong>{{ group.stock_balance|thousands }}</strong>
+    </div>
+</div>
+
+<div class="table-scroll">
+    <table>
+        <thead>
+            <tr>
+                <th>Asset Name</th>
+                <th>Serial / Plate</th>
+                <th>Quantity Issued</th>
+                <th>Received By</th>
+                <th>Given Out By</th>
+                <th>Assigned To</th>
+                <th>Issue Date</th>
+                <th>Condition Issued</th>
+                <th>Stock Balance</th>
+                <th>Status</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for row in issue_rows %}
+                <tr>
+                    <td>{{ row.asset.asset_name|default:"-" }}</td>
+                    <td>{{ row.asset.asset_number|default:row.asset.number_plate|default:"-" }}</td>
+                    <td>{{ row.quantity|thousands }}</td>
+                    <td>{{ row.received_by|default:"-" }}</td>
+                    <td>{{ row.issued_by }}</td>
+                    <td>{{ row.assigned_to|default:"-" }}</td>
+                    <td>{{ row.assignment.assigned_date }}</td>
+                    <td>{{ row.assignment.get_condition_issued_display }}</td>
+                    <td>{{ row.stock_balance|thousands }}</td>
+                    <td>{{ row.assignment.get_accountability_status_display }}</td>
+                    <td class="row-actions-cell">
+                        <div class="row-actions">
+                            <div class="row-action-group">
+                                <a class="action-btn view" href="{% url 'webcom:detail' 'asset-assignments' row.assignment.pk %}" title="View accountability record">View</a>
+                                <a class="action-btn secondary" href="{% url 'webcom:update' 'asset-assignments' row.assignment.pk %}" title="Edit accountability record">Edit</a>
+                            </div>
+                        </div>
+                    </td>
+                </tr>
+            {% empty %}
+                <tr>
+                    <td colspan="11">No assets are currently issued out for this group.</td>
+                </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}

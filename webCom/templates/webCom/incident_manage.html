@@ -1,0 +1,188 @@
+{% extends "webCom/base.html" %}
+
+{% block title %}{{ title }}{% endblock %}
+
+{% block content %}
+<style>
+    .incident-workflow {
+        display: grid;
+        gap: 14px;
+    }
+    .incident-status-line {
+        display: grid;
+        grid-template-columns: repeat(6, minmax(110px, 1fr));
+        gap: 8px;
+    }
+    .incident-step {
+        border: 1px solid var(--line);
+        background: #ffffff;
+        padding: 10px;
+        font-size: 12px;
+        font-weight: 800;
+        text-align: center;
+        color: var(--muted);
+    }
+    .incident-step.complete {
+        border-color: #0f766e;
+        background: #ecfdf5;
+        color: #115e59;
+    }
+    .incident-context {
+        display: grid;
+        grid-template-columns: 1.1fr 0.9fr;
+        gap: 14px;
+    }
+    .incident-management-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 12px;
+    }
+    .incident-management-section {
+        border: 1px solid var(--line);
+        background: #ffffff;
+        padding: 12px;
+    }
+    .incident-management-section.full {
+        grid-column: 1 / -1;
+    }
+    .incident-management-section h2 {
+        margin: 0 0 10px;
+        font-size: 14px;
+        color: #102a43;
+    }
+    .incident-field {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+        margin-bottom: 10px;
+    }
+    .incident-field label {
+        margin: 0;
+        font-size: 12px;
+        color: #102a43;
+    }
+    .incident-field input,
+    .incident-field select,
+    .incident-field textarea {
+        width: 100%;
+        max-width: none;
+    }
+    .incident-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        justify-content: flex-end;
+        margin-top: 12px;
+    }
+    @media (max-width: 980px) {
+        .incident-status-line,
+        .incident-context,
+        .incident-management-grid {
+            grid-template-columns: 1fr;
+        }
+    }
+</style>
+
+<div class="topbar">
+    <div>
+        <h1>{{ title }}</h1>
+    </div>
+    <div class="actions">
+        <a class="btn" href="{% url 'webcom:detail' 'incidents' incident.pk %}">Incident Details</a>
+        <a class="btn" href="{% url 'webcom:list' 'incidents' %}">Incidents</a>
+        <a class="btn primary" href="{% url 'webcom:incident_investigation_report' incident.pk %}">Create Report</a>
+        <a class="btn primary" href="{% url 'webcom:incident_notify' incident.pk %}">Notify Authorities</a>
+    </div>
+</div>
+
+<div class="incident-workflow">
+    <div class="incident-status-line">
+        {% for step in status_steps %}
+            <div class="incident-step {% if step.complete %}complete{% endif %}">{{ step.label }}</div>
+        {% endfor %}
+    </div>
+
+    <div class="incident-context">
+        <section class="panel incident-section">
+            <h2>Incident Summary</h2>
+            <dl class="detail-list">
+                <dt>Site</dt><dd>{{ incident.site }}</dd>
+                <dt>Location</dt><dd>{{ incident.location }}</dd>
+                <dt>Incident Type</dt><dd>{{ incident.get_incident_type_display }}</dd>
+                <dt>Severity</dt><dd>{{ incident.get_severity_level_display }}</dd>
+                <dt>Status</dt><dd>{{ incident.get_status_display }}</dd>
+                <dt>Date Time</dt><dd>{{ incident.date_time }}</dd>
+                <dt>Reported By</dt><dd>{{ incident.reported_by }}</dd>
+                <dt>Description</dt><dd>{{ incident.description }}</dd>
+            </dl>
+        </section>
+
+        <section class="panel incident-section">
+            <h2>Notifications</h2>
+            {% if notifications %}
+                <div class="table-scroll incident-mini-table">
+                    <table class="compact-table">
+                        <thead>
+                            <tr>
+                                <th>Recipient</th>
+                                <th>Authority</th>
+                                <th>Status</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for notification in notifications %}
+                                <tr>
+                                    <td>{{ notification.recipient }}</td>
+                                    <td>{{ notification.authority_group }}</td>
+                                    <td>{{ notification.get_status_display }}</td>
+                                </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            {% else %}
+                <p class="muted">No notifications have been sent yet.</p>
+            {% endif %}
+        </section>
+    </div>
+
+    <form method="post" novalidate>
+        {% csrf_token %}
+        {{ form.non_field_errors }}
+        <div class="incident-management-grid">
+            <section class="incident-management-section">
+                <h2>Reporting</h2>
+                <div class="incident-field">{{ form.reported_to.label_tag }}{{ form.reported_to }}{{ form.reported_to.errors }}</div>
+                <div class="incident-field">{{ form.occurrence_summary.label_tag }}{{ form.occurrence_summary }}{{ form.occurrence_summary.errors }}</div>
+                <div class="incident-field">{{ form.immediate_action_taken.label_tag }}{{ form.immediate_action_taken }}{{ form.immediate_action_taken.errors }}</div>
+            </section>
+
+            <section class="incident-management-section">
+                <h2>Investigation</h2>
+                <div class="incident-field">{{ form.investigation_assigned_to.label_tag }}{{ form.investigation_assigned_to }}{{ form.investigation_assigned_to.errors }}</div>
+                <div class="incident-field">{{ form.investigation_findings.label_tag }}{{ form.investigation_findings }}{{ form.investigation_findings.errors }}</div>
+            </section>
+
+            <section class="incident-management-section">
+                <h2>Corrective Action</h2>
+                <div class="incident-field">{{ form.corrective_action.label_tag }}{{ form.corrective_action }}{{ form.corrective_action.errors }}</div>
+            </section>
+
+            <section class="incident-management-section">
+                <h2>Resolution And Closure</h2>
+                <div class="incident-field">{{ form.conclusion.label_tag }}{{ form.conclusion }}{{ form.conclusion.errors }}</div>
+                <div class="incident-field">{{ form.closed_by.label_tag }}{{ form.closed_by }}{{ form.closed_by.errors }}</div>
+            </section>
+        </div>
+
+        <div class="incident-actions">
+            <button class="btn" type="submit" name="incident_action" value="save_updates">Save Updates</button>
+            <button class="btn" type="submit" name="incident_action" value="assign_investigation">Assign Investigation</button>
+            <button class="btn" type="submit" name="incident_action" value="save_findings">Save Findings</button>
+            <button class="btn" type="submit" name="incident_action" value="record_action">Record Action</button>
+            <button class="btn primary" type="submit" name="incident_action" value="resolve">Resolve</button>
+            <button class="btn danger" type="submit" name="incident_action" value="close">Close Incident</button>
+        </div>
+    </form>
+</div>
+{% endblock %}

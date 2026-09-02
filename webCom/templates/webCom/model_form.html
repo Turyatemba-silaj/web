@@ -583,6 +583,82 @@
 </script>
 {% endif %}
 
+{% if model_name == "asset-assignments" %}
+{{ asset_assignment_asset_types|json_script:"asset-assignment-types" }}
+<script>
+    (function () {
+        const typeMapElement = document.getElementById("asset-assignment-types");
+        const assetTypes = typeMapElement ? JSON.parse(typeMapElement.textContent) : {};
+        const assignmentFields = ["guard", "driver", "site", "deployment"];
+        const visibleByType = {
+            uniform: ["guard"],
+            vehicle: ["driver"],
+            gun: ["site"],
+            weapon: ["site"],
+            equipment: ["site"]
+        };
+
+        function setFieldVisibility(container, fieldName, visible) {
+            const selector = '[data-field="' + fieldName + '"]';
+            const fieldWrapper = container.querySelector(selector);
+            if (!fieldWrapper) return;
+            fieldWrapper.hidden = !visible;
+            fieldWrapper.querySelectorAll("select, input, textarea").forEach(function (input) {
+                input.disabled = !visible;
+                if (!visible && !input.name.endsWith("-DELETE")) input.value = "";
+            });
+        }
+
+        function syncRow(row) {
+            const assetField = row.querySelector('[name$="asset"]');
+            if (!assetField) return;
+            const assetType = assetTypes[assetField.value] || "";
+            const visibleTargets = visibleByType[assetType] || assignmentFields;
+            assignmentFields.forEach(function (fieldName) {
+                setFieldVisibility(row, fieldName, visibleTargets.includes(fieldName));
+            });
+        }
+
+        function syncSingleForm() {
+            const formGrid = document.querySelector(".compact-form-grid");
+            if (!formGrid || document.getElementById("entry-rows")) return;
+            const assetField = formGrid.querySelector('[name$="asset"]');
+            if (!assetField) return;
+            const assetType = assetTypes[assetField.value] || "";
+            const visibleTargets = visibleByType[assetType] || assignmentFields;
+            assignmentFields.forEach(function (fieldName) {
+                setFieldVisibility(formGrid, fieldName, visibleTargets.includes(fieldName));
+            });
+        }
+
+        function syncHeaders(table) {
+            assignmentFields.forEach(function (fieldName) {
+                const hasVisibleCell = Array.from(table.querySelectorAll('tbody td[data-field="' + fieldName + '"]')).some(function (cell) {
+                    return !cell.hidden;
+                });
+                table.querySelectorAll('th[data-field="' + fieldName + '"]').forEach(function (header) {
+                    header.hidden = !hasVisibleCell;
+                });
+            });
+        }
+
+        function syncAssetAssignments() {
+            document.querySelectorAll("#entry-rows .entry-row").forEach(syncRow);
+            document.querySelectorAll(".entry-formset table").forEach(syncHeaders);
+            syncSingleForm();
+        }
+
+        document.addEventListener("change", function (event) {
+            if (event.target.matches('[name$="asset"]')) syncAssetAssignments();
+        });
+        document.addEventListener("click", function (event) {
+            if (event.target.id === "add-entry-row") window.setTimeout(syncAssetAssignments, 0);
+        });
+        syncAssetAssignments();
+    })();
+</script>
+{% endif %}
+
 {% if model_name == "training" %}
 <script>
     (function () {

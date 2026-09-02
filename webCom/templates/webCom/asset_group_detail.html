@@ -1,0 +1,165 @@
+{% extends "webCom/base.html" %}
+{% load format_values %}
+
+{% block title %}{{ title }}{% endblock %}
+
+{% block content %}
+<style>
+    .asset-summary-grid {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(150px, 1fr));
+        gap: 12px;
+        margin-bottom: 16px;
+    }
+    .asset-summary-card {
+        border: 1px solid var(--line);
+        background: #ffffff;
+        padding: 14px;
+    }
+    .asset-summary-card span {
+        display: block;
+        color: var(--muted);
+        font-size: 12px;
+        font-weight: 700;
+        text-transform: uppercase;
+        margin-bottom: 8px;
+    }
+    .asset-summary-card strong {
+        display: block;
+        color: var(--text);
+        font-size: 28px;
+        line-height: 1;
+    }
+    .stock-badge {
+        display: inline-flex;
+        align-items: center;
+        min-height: 24px;
+        padding: 4px 9px;
+        border-radius: 999px;
+        font-size: 12px;
+        font-weight: 800;
+        white-space: nowrap;
+    }
+    .stock-badge.ok {
+        background: #dcfce7;
+        color: #166534;
+    }
+    .stock-badge.low {
+        background: #fee2e2;
+        color: #991b1b;
+    }
+    .asset-group-message {
+        border-left: 4px solid #b91c1c;
+        background: #fef2f2;
+        color: #7f1d1d;
+        padding: 12px 14px;
+        margin-bottom: 16px;
+        font-weight: 700;
+    }
+    @media (max-width: 900px) {
+        .asset-summary-grid {
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+    }
+    @media (max-width: 560px) {
+        .asset-summary-grid {
+            grid-template-columns: 1fr;
+        }
+    }
+</style>
+
+<div class="topbar">
+    <div>
+        <h1>{{ title }}</h1>
+    </div>
+    <div class="actions">
+        <a class="btn" href="{% url 'webcom:list' 'assets' %}">Back</a>
+        <a class="btn" href="{% url 'webcom:asset_issued_out_detail' %}?{{ group.group_query }}">Issued Out Details</a>
+        <a class="btn primary" href="{% url 'webcom:create' 'assets' %}">Add Asset</a>
+    </div>
+</div>
+
+{% if group.is_low_stock %}
+    <div class="asset-group-message">{{ group.low_stock_message }}</div>
+{% endif %}
+
+<div class="asset-summary-grid">
+    <div class="asset-summary-card">
+        <span>Individual Assets</span>
+        <strong>{{ group.asset_count|thousands }}</strong>
+    </div>
+    <div class="asset-summary-card">
+        <span>Store Quantity</span>
+        <strong>{{ group.quantity|thousands }}</strong>
+    </div>
+    <div class="asset-summary-card">
+        <span>Assets Issued Out</span>
+        <strong><a href="{% url 'webcom:asset_issued_out_detail' %}?{{ group.group_query }}">{{ group.assets_issued_out|thousands }}</a></strong>
+    </div>
+    <div class="asset-summary-card">
+        <span>Stock Balance</span>
+        <strong>{{ group.stock_balance|thousands }}</strong>
+    </div>
+</div>
+
+<div class="table-scroll">
+    <table>
+        <thead>
+            <tr>
+                <th>Serial Number</th>
+                <th>Engine Number</th>
+                <th>Chassis Number</th>
+                <th>Number Plate</th>
+                <th>Make</th>
+                <th>Model</th>
+                <th>Color</th>
+                <th>Size</th>
+                <th>Condition</th>
+                <th>Store Quantity</th>
+                <th>Assets Issued Out</th>
+                <th>Stock Balance</th>
+                <th>Status</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for row in individual_rows %}
+                <tr>
+                    <td>{{ row.asset.asset_number|default:"-" }}</td>
+                    <td>{{ row.asset.engine_number|default:"-" }}</td>
+                    <td>{{ row.asset.chassis_number|default:"-" }}</td>
+                    <td>{{ row.asset.number_plate|default:"-" }}</td>
+                    <td>{{ row.asset.make|default:"-" }}</td>
+                    <td>{{ row.asset.model|default:"-" }}</td>
+                    <td>{{ row.asset.color|default:"-" }}</td>
+                    <td>{{ row.asset.size|default:"-" }}</td>
+                    <td>{{ row.asset.get_condition_display|default:"-" }}</td>
+                    <td>{{ row.store_quantity|thousands }}</td>
+                    <td><a class="action-btn workflow" href="{% url 'webcom:asset_issued_out_detail' %}?asset_id={{ row.asset.pk }}" title="View issued out details">{{ row.assets_issued_out|thousands }}</a></td>
+                    <td>{{ row.stock_balance|thousands }}</td>
+                    <td>
+                        {% if row.stock_balance <= 10 %}
+                            <span class="stock-badge low">Low</span>
+                        {% else %}
+                            <span class="stock-badge ok">Available</span>
+                        {% endif %}
+                    </td>
+                    <td class="row-actions-cell">
+                        <div class="row-actions">
+                            <div class="row-action-group">
+                                <a class="action-btn view" href="{% url 'webcom:detail' 'assets' row.asset.pk %}" title="View asset">View</a>
+                                <a class="action-btn secondary" href="{% url 'webcom:update' 'assets' row.asset.pk %}" title="Edit asset">Edit</a>
+                                <a class="action-btn danger" href="{% url 'webcom:delete' 'assets' row.asset.pk %}" title="Delete asset">Delete</a>
+                            </div>
+                        </div>
+                    </td>
+                </tr>
+            {% empty %}
+                <tr>
+                    <td colspan="14"></td>
+                </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}

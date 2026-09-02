@@ -369,6 +369,23 @@ class Asset(models.Model):
     asset_type = models.CharField(max_length=50, choices=ASSET_TYPE_CHOICES)
     asset_name = models.CharField(max_length=255, blank=True, default="")
     asset_number = models.CharField("Serial Number", max_length=100, blank=True)
+    make = models.CharField(max_length=120, blank=True, default="")
+    model = models.CharField(max_length=120, blank=True, default="")
+    engine_number = models.CharField(max_length=120, blank=True, default="")
+    chassis_number = models.CharField(max_length=120, blank=True, default="")
+    number_plate = models.CharField(max_length=80, blank=True, default="")
+    police_number = models.CharField(max_length=120, blank=True, default="")
+    color = models.CharField(max_length=80, blank=True, default="")
+    size = models.CharField(max_length=80, blank=True, default="")
+    CONDITION_CHOICES = [
+        ('new', 'New'),
+        ('good', 'Good'),
+        ('fair', 'Fair'),
+        ('poor', 'Poor'),
+        ('damaged', 'Damaged'),
+    ]
+    condition = models.CharField(max_length=20, choices=CONDITION_CHOICES, blank=True, default="")
+    storage_location = models.CharField(max_length=160, blank=True, default="")
     quantity = models.IntegerField(validators=[MinValueValidator(1)])
     notes = models.TextField(blank=True, null=True)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -379,12 +396,30 @@ class Asset(models.Model):
         serial = f" - {self.asset_number}" if self.asset_number else ""
         return f"{name}{serial}"
 
+    @property
+    def assets_issued_out(self):
+        return sum(assignment.quantity for assignment in self.assignments.filter(status='assigned'))
+
+    @property
+    def stock_balance(self):
+        return self.quantity - self.assets_issued_out
+
+    @property
+    def is_low_stock(self):
+        return self.stock_balance <= 10
+
+    @property
+    def low_stock_message(self):
+        if not self.is_low_stock:
+            return "-"
+        return f"{self.get_asset_type_display()} is low please refill more {self.asset_name or self.get_asset_type_display()}"
+
     class Meta:
         db_table = 'assets'
 
 
 class AssetAssignment(models.Model):
-    """Tracks asset issue/assignment without changing company inventory."""
+    """Tracks asset issue and accountability without changing company inventory."""
     assignment_id = models.AutoField(primary_key=True)
     asset = models.ForeignKey(Asset, on_delete=models.CASCADE, related_name='assignments')
     quantity = models.IntegerField(default=1, validators=[MinValueValidator(1)])
@@ -392,16 +427,35 @@ class AssetAssignment(models.Model):
     driver = models.ForeignKey('Employee', on_delete=models.SET_NULL, blank=True, null=True, related_name='vehicle_assignments')
     site = models.ForeignKey(Site, on_delete=models.SET_NULL, blank=True, null=True, related_name='asset_assignments')
     deployment = models.ForeignKey('Deployment', on_delete=models.SET_NULL, blank=True, null=True, related_name='asset_assignments')
+    issued_by = models.ForeignKey('Employee', on_delete=models.SET_NULL, blank=True, null=True, related_name='issued_asset_assignments')
+    received_by = models.ForeignKey('Employee', on_delete=models.SET_NULL, blank=True, null=True, related_name='received_asset_assignments')
     assigned_date = models.DateField(default=timezone.now)
+    acknowledged_at = models.DateTimeField(blank=True, null=True)
     return_date = models.DateField(blank=True, null=True)
     status = models.CharField(max_length=20, choices=[('assigned', 'Assigned'), ('returned', 'Returned'), ('lost', 'Lost'), ('damaged', 'Damaged')], default='assigned')
+    ACCOUNTABILITY_STATUS_CHOICES = [
+        ('pending_acknowledgement', 'Pending Acknowledgement'),
+        ('acknowledged', 'Acknowledged'),
+        ('cleared', 'Cleared'),
+        ('escalated', 'Escalated'),
+    ]
+    accountability_status = models.CharField(max_length=30, choices=ACCOUNTABILITY_STATUS_CHOICES, default='pending_acknowledgement')
+    CONDITION_CHOICES = [
+        ('good', 'Good'),
+        ('fair', 'Fair'),
+        ('poor', 'Poor'),
+        ('damaged', 'Damaged'),
+    ]
+    condition_issued = models.CharField(max_length=20, choices=CONDITION_CHOICES, default='good')
+    condition_returned = models.CharField(max_length=20, choices=CONDITION_CHOICES, blank=True, default='')
     notes = models.TextField(blank=True)
+    accountability_notes = models.TextField(blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
     @property
     def assigned_to(self):
-        return self.guard or self.driver or "-"
+        return self.guard or self.driver or self.site or self.deployment or "-"
 
     def clean(self):
         super().clean()
@@ -409,6 +463,49 @@ class AssetAssignment(models.Model):
             raise ValidationError("Return date cannot be earlier than assigned date.")
         if not self.guard_id and not self.driver_id and not self.site_id and not self.deployment_id:
             raise ValidationError("Assign the asset to a guard, driver, site, or deployment.")
+        if self.asset_id:
+            asset_type = self.asset.asset_type
+            if asset_type == "uniform":
+                if not self.guard_id:
+                    raise ValidationError({"guard": "Uniform assets must be assigned to an employee."})
+                if self.driver_id or self.site_id or self.deployment_id:
+                    raise ValidationError("Uniform assets can only be assigned to an employee.")
+            elif asset_type == "vehicle":
+                if not self.driver_id:
+                    raise ValidationError({"driver": "Vehicle assets must be assigned to a driver."})
+                if self.guard_id or self.site_id or self.deployment_id:
+                    raise ValidationError("Vehicle assets can only be assigned to a driver.")
+            elif asset_type in ("gun", "weapon", "equipment"):
+                if not self.site_id:
+                    raise ValidationError({"site": f"{self.asset.get_asset_type_display()} assets must be assigned to a site."})
+                if self.guard_id or self.driver_id or self.deployment_id:
+                    raise ValidationError(f"{self.asset.get_asset_type_display()} assets can only be assigned to a site.")
+        if self.status == 'returned' and not self.return_date:
+            raise ValidationError("Return date is required when an asset is returned.")
+        if self.status in ('lost', 'damaged') and not self.accountability_notes:
+            raise ValidationError("Accountability notes are required for lost or damaged assets.")
+
+    def sync_accountability_status(self):
+        if self.status == 'returned':
+            self.accountability_status = 'cleared'
+        elif self.status in ('lost', 'damaged'):
+            self.accountability_status = 'escalated'
+        elif self.received_by_id or self.acknowledged_at:
+            self.accountability_status = 'acknowledged'
+        else:
+            self.accountability_status = 'pending_acknowledgement'
+
+    def save(self, *args, **kwargs):
+        if self.received_by_id and not self.acknowledged_at:
+            self.acknowledged_at = timezone.now()
+        self.sync_accountability_status()
+        update_fields = kwargs.get('update_fields')
+        if update_fields is not None:
+            update_fields = set(update_fields)
+            update_fields.update({'accountability_status', 'acknowledged_at'})
+            kwargs['update_fields'] = list(update_fields)
+        self.full_clean()
+        super().save(*args, **kwargs)
 
     def __str__(self):
         return f"{self.asset} x {self.quantity}"

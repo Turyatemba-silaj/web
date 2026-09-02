@@ -1,4 +1,5 @@
 Django==6.0.7
+django-unfold==0.94.0
 dj-database-url==3.0.1
 psycopg[binary]==3.3.4
 whitenoise==6.9.0

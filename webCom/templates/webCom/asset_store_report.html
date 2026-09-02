@@ -70,9 +70,10 @@
                     <th>Asset Type</th>
                     <th>Asset Name</th>
                     <th>Serial Number</th>
-                    <th>Total Quantity</th>
-                    <th>Assigned Quantity</th>
                     <th>Store Quantity</th>
+                    <th>Assets Issued Out</th>
+                    <th>Stock Balance</th>
+                    <th>Low Stock Message</th>
                     <th>Notes</th>
                 </tr>
             </thead>
@@ -83,14 +84,15 @@
                         <td>{{ row.asset.get_asset_type_display }}</td>
                         <td>{{ row.asset.asset_name }}</td>
                         <td>{{ row.asset.asset_number|default:"-" }}</td>
-                        <td>{{ row.total_quantity|thousands }}</td>
-                        <td>{{ row.assigned_quantity|thousands }}</td>
                         <td>{{ row.store_quantity|thousands }}</td>
+                        <td><a class="action-btn workflow" href="{% url 'webcom:asset_issued_out_detail' %}?{{ row.asset.group_query }}" title="View issued out details">{{ row.assets_issued_out|thousands }}</a></td>
+                        <td>{{ row.stock_balance|thousands }}</td>
+                        <td>{{ row.low_stock_message }}</td>
                         <td>{{ row.notes }}</td>
                     </tr>
                 {% empty %}
                     <tr>
-                        <td colspan="8"></td>
+                        <td colspan="9"></td>
                     </tr>
                 {% endfor %}
             </tbody>

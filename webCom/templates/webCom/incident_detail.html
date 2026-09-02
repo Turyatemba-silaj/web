@@ -9,6 +9,8 @@
     </div>
     <div class="actions">
         <a class="btn" href="{% url 'webcom:list' model_name %}">Back</a>
+        <a class="btn primary" href="{% url 'webcom:incident_manage' pk %}">Manage</a>
+        <a class="btn primary" href="{% url 'webcom:incident_investigation_report' pk %}">Create Report</a>
         <a class="btn primary" href="{% url 'webcom:incident_notify' pk %}">Notify</a>
         <a class="btn" href="{% url 'webcom:update' model_name pk %}">Edit</a>
         <a class="btn danger" href="{% url 'webcom:delete' model_name pk %}">Delete</a>

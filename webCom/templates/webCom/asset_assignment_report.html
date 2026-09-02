@@ -59,7 +59,7 @@
 
 <section class="report-page">
     <div class="report-heading">
-        <h1>Asset Assignment Report</h1>
+        <h1>Asset Accountability Report</h1>
     </div>
 
     <div class="table-scroll">
@@ -71,12 +71,17 @@
                     <th>Asset Name</th>
                     <th>Serial Number</th>
                     <th>Quantity</th>
-                    <th>Status</th>
-                    <th>Assigned To</th>
+                    <th>Asset Status</th>
+                    <th>Accountability</th>
+                    <th>Accountable To</th>
+                    <th>Issued By</th>
+                    <th>Received By</th>
                     <th>Site</th>
                     <th>Deployment</th>
-                    <th>Assigned Date</th>
+                    <th>Issue Date</th>
                     <th>Return Date</th>
+                    <th>Issued Condition</th>
+                    <th>Returned Condition</th>
                 </tr>
             </thead>
             <tbody>
@@ -88,15 +93,20 @@
                         <td>{{ row.asset.asset_number|default:"-" }}</td>
                         <td>{{ row.quantity|thousands }}</td>
                         <td>{{ row.status }}</td>
+                        <td>{{ row.accountability_status }}</td>
                         <td>{{ row.assigned_to }}</td>
+                        <td>{{ row.issued_by }}</td>
+                        <td>{{ row.received_by }}</td>
                         <td>{{ row.site }}</td>
                         <td>{{ row.deployment }}</td>
                         <td>{{ row.assigned_date }}</td>
                         <td>{{ row.return_date }}</td>
+                        <td>{{ row.condition_issued }}</td>
+                        <td>{{ row.condition_returned }}</td>
                     </tr>
                 {% empty %}
                     <tr>
-                        <td colspan="11"></td>
+                        <td colspan="15"></td>
                     </tr>
                 {% endfor %}
             </tbody>

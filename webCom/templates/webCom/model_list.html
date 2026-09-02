@@ -14,6 +14,7 @@
         {% if model_name == "asset-assignments" %}<a class="btn" href="{% url 'webcom:asset_assignment_report' %}">Report</a>{% endif %}
         {% if model_name == "incidents" %}<a class="btn" href="{% url 'webcom:incident_report' %}">Report</a>{% endif %}
         {% if model_name == "incidents" %}<a class="btn" href="{% url 'webcom:incident_notifications' %}">Notifications</a>{% endif %}
+        {% if model_name == "leaves" %}<a class="btn" href="{% url 'webcom:leave_notifications' %}">Notifications</a>{% endif %}
         {% if model_name == "disciplinary-actions" %}<a class="btn" href="{% url 'webcom:disciplinary_notifications' %}">Notifications</a>{% endif %}
         {% if model_name == "budgets" %}<a class="btn" href="{% url 'webcom:budget_report' %}">Budget Report</a>{% endif %}
         {% if model_name == "expenses" %}<a class="btn" href="{% url 'webcom:expense_report' %}">Accountability Report</a>{% endif %}
@@ -48,24 +49,41 @@
             {% for row in rows %}
                 <tr data-record-row data-record-id="{{ row.pk }}">
                     <td class="record-select-col"><input type="checkbox" data-record-select value="{{ row.pk }}" aria-label="Select record {{ row.pk }}"></td>
-                    {% for value in row.values %}
-                        <td>{{ value }}</td>
+                    {% for cell in row.cells %}
+                        <td>
+                            {% if model_name == "assets" and cell.field == "assets_issued_out" %}
+                                <a class="action-btn workflow" href="{% url 'webcom:asset_issued_out_detail' %}?{{ row.object.group_query }}" title="View issued out details">{{ cell.value }}</a>
+                            {% else %}
+                                {{ cell.value }}
+                            {% endif %}
+                        </td>
                     {% endfor %}
-                    <td>
-                        <div class="actions">
-                            <a class="btn" href="{% url 'webcom:detail' model_name row.pk %}">View</a>
-                            {% if model_name == "salaries" %}<a class="btn primary" href="{% url 'webcom:salary_payslip' row.pk %}">Payslip</a>{% endif %}
-                            {% if model_name == "invoices" %}<a class="btn primary" href="{% url 'webcom:invoice_document' row.pk %}">Invoice</a>{% endif %}
-                            {% if model_name == "payments" %}<a class="btn primary" href="{% url 'webcom:payment_receipt' row.pk %}">Receipt</a>{% endif %}
-                            {% if model_name == "payments" %}<a class="btn" href="{% url 'webcom:payment_reconciliation' row.pk %}">Reconciliation</a>{% endif %}
-                            {% if model_name == "purchase-orders" %}<a class="btn primary" href="{% url 'webcom:purchase_order_lpo_report' row.pk %}">LPO</a>{% endif %}
-                            {% if model_name == "training" %}<a class="btn primary" href="{% url 'webcom:training_certificate' row.pk %}">Generate Certificate</a>{% endif %}
-                            {% if model_name == "employees" and row.object.can_transfer %}<a class="btn primary" href="{% url 'webcom:employee_transfer' row.pk %}">Transfer</a>{% endif %}
-                            {% if model_name == "leaves" %}<a class="btn primary" href="{% url 'webcom:leave_review' row.pk %}">Review</a>{% endif %}
-                            {% if model_name == "procurement-requisitions" and row.object.can_contact_supplier %}<form method="post" action="{% url 'webcom:procurement_contact_supplier' row.pk %}">{% csrf_token %}<button class="btn primary" type="submit">Contact Supplier</button></form>{% endif %}
-                            {% if not managed_table %}<a class="btn" href="{% url 'webcom:update' model_name row.pk %}">Edit</a>{% endif %}
-                            {% if model_name == "incidents" %}<a class="btn primary" href="{% url 'webcom:incident_notify' row.pk %}">Notify</a>{% endif %}
-                            {% if not managed_table %}<a class="btn danger" href="{% url 'webcom:delete' model_name row.pk %}">Delete</a>{% endif %}
+                    <td class="row-actions-cell">
+                        <div class="row-actions">
+                            <div class="row-action-group">
+                                {% if model_name == "assets" %}
+                                    <a class="action-btn view" href="{% url 'webcom:asset_group_detail' %}?{{ row.object.group_query }}" title="View asset group">Details</a>
+                                {% else %}
+                                    <a class="action-btn view" href="{% url 'webcom:detail' model_name row.pk %}" title="View record">View</a>
+                                {% endif %}
+                                {% if model_name == "employees" and row.object.can_transfer %}<a class="action-btn workflow" href="{% url 'webcom:employee_transfer' row.pk %}" title="Transfer employee">Transfer</a>{% endif %}
+                                {% if model_name == "leaves" %}<a class="action-btn workflow" href="{% url 'webcom:leave_review' row.pk %}" title="Review leave">Review</a>{% endif %}
+                                {% if model_name == "incidents" %}<a class="action-btn workflow" href="{% url 'webcom:incident_manage' row.pk %}" title="Manage incident">Manage</a>{% endif %}
+                                {% if model_name == "incidents" %}<a class="action-btn secondary" href="{% url 'webcom:incident_investigation_report' row.pk %}" title="Create investigation report">Report</a>{% endif %}
+                                {% if model_name == "salaries" %}<a class="action-btn workflow" href="{% url 'webcom:salary_payslip' row.pk %}" title="Open payslip">Payslip</a>{% endif %}
+                                {% if model_name == "invoices" %}<a class="action-btn workflow" href="{% url 'webcom:invoice_document' row.pk %}" title="Open invoice">Invoice</a>{% endif %}
+                                {% if model_name == "payments" %}<a class="action-btn workflow" href="{% url 'webcom:payment_receipt' row.pk %}" title="Open receipt">Receipt</a>{% endif %}
+                                {% if model_name == "payments" %}<a class="action-btn secondary" href="{% url 'webcom:payment_reconciliation' row.pk %}" title="Open reconciliation">Reconcile</a>{% endif %}
+                                {% if model_name == "purchase-orders" %}<a class="action-btn workflow" href="{% url 'webcom:purchase_order_lpo_report' row.pk %}" title="Open LPO">LPO</a>{% endif %}
+                                {% if model_name == "training" %}<a class="action-btn workflow" href="{% url 'webcom:training_certificate' row.pk %}" title="Generate certificate">Certificate</a>{% endif %}
+                                {% if model_name == "procurement-requisitions" and row.object.can_contact_supplier %}<form method="post" action="{% url 'webcom:procurement_contact_supplier' row.pk %}">{% csrf_token %}<button class="action-btn workflow" type="submit" title="Contact supplier">Contact</button></form>{% endif %}
+                            </div>
+                            {% if not managed_table and model_name != "assets" %}
+                                <div class="row-action-group maintenance">
+                                    <a class="action-btn secondary" href="{% url 'webcom:update' model_name row.pk %}" title="Edit record">Edit</a>
+                                    <a class="action-btn danger" href="{% url 'webcom:delete' model_name row.pk %}" title="Delete record">Delete</a>
+                                </div>
+                            {% endif %}
                         </div>
                     </td>
                 </tr>

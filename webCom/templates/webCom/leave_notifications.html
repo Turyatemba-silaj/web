@@ -1,0 +1,81 @@
+{% extends "webCom/base.html" %}
+
+{% block title %}{{ title }}{% endblock %}
+
+{% block content %}
+<div class="topbar">
+    <div>
+        <h1>{{ title }}</h1>
+    </div>
+    <div class="actions">
+        <a class="btn" href="{% url 'webcom:list' 'leaves' %}">Leaves</a>
+        <a class="btn" href="{% url 'webcom:home' %}">Dashboard</a>
+    </div>
+</div>
+
+{% if notifications %}
+    <div class="table-scroll">
+        <table class="compact-table">
+            <thead>
+                <tr>
+                    <th>Leave</th>
+                    <th>Employee</th>
+                    <th>Recipient</th>
+                    <th>Role</th>
+                    <th>Message</th>
+                    <th>Workflow</th>
+                    <th>Status</th>
+                    <th>Notified At</th>
+                    <th>Decision</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for notification in notifications %}
+                    <tr>
+                        <td>{{ notification.leave.get_leave_type_display }}</td>
+                        <td>{{ notification.leave.employee }}</td>
+                        <td>{{ notification.recipient }}</td>
+                        <td>{{ notification.recipient_group }}</td>
+                        <td>{{ notification.message }}</td>
+                        <td>
+                            Verification: {{ notification.leave.get_operations_verification_status_display }}<br>
+                            Approval: {{ notification.leave.get_approval_status_display }}
+                        </td>
+                        <td>{{ notification.get_status_display }}</td>
+                        <td>{{ notification.notified_at }}</td>
+                        <td>
+                            <div class="actions">
+                                {% if notification.can_verify %}
+                                    <form method="post" action="{% url 'webcom:leave_notification_action' notification.pk 'verify' %}">
+                                        {% csrf_token %}
+                                        <button class="btn primary" type="submit">Verify</button>
+                                    </form>
+                                {% endif %}
+                                {% if notification.can_approve %}
+                                    <form method="post" action="{% url 'webcom:leave_notification_action' notification.pk 'approve' %}">
+                                        {% csrf_token %}
+                                        <button class="btn primary" type="submit">Approve</button>
+                                    </form>
+                                {% endif %}
+                                {% if notification.can_reject %}
+                                    <form method="post" action="{% url 'webcom:leave_notification_action' notification.pk 'reject' %}">
+                                        {% csrf_token %}
+                                        <button class="btn danger" type="submit">Reject</button>
+                                    </form>
+                                {% endif %}
+                                {% if not notification.can_verify and not notification.can_approve and not notification.can_reject %}
+                                    {{ notification.decision|default:"-" }}
+                                {% endif %}
+                            </div>
+                        </td>
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+{% else %}
+    <div class="panel">
+        <p class="muted">No leave notifications yet.</p>
+    </div>
+{% endif %}
+{% endblock %}

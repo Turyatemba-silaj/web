@@ -1,0 +1,249 @@
+{% extends "webCom/base.html" %}
+
+{% block title %}{{ title }}{% endblock %}
+
+{% block content %}
+<style>
+    .leave-window {
+        background: #ffffff;
+        border: 1px solid #d8e0ea;
+        border-radius: 4px;
+        box-shadow: 0 12px 32px rgba(21, 35, 50, 0.08);
+        overflow: hidden;
+    }
+    .leave-window-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 10px 14px;
+        border-bottom: 1px solid #d8e0ea;
+        background: #ffffff;
+    }
+    .leave-window-title {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 15px;
+        font-weight: 800;
+        color: #2b3138;
+    }
+    .leave-close {
+        border: 0;
+        background: transparent;
+        color: #7b8794;
+        font-size: 18px;
+        font-weight: 800;
+        text-decoration: none;
+        line-height: 1;
+    }
+    .leave-section-bar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+        background: #0b74de;
+        color: #ffffff;
+        font-weight: 800;
+        padding: 12px 16px;
+    }
+    .leave-tools {
+        display: flex;
+        gap: 6px;
+    }
+    .leave-tool {
+        width: 17px;
+        height: 17px;
+        border-radius: 50%;
+        display: grid;
+        place-items: center;
+        font-size: 10px;
+        font-weight: 900;
+        color: #ffffff;
+    }
+    .leave-tool.blue { background: #f8fafc; color: #2563eb; }
+    .leave-tool.green { background: #16a34a; }
+    .leave-tool.orange { background: #f59e0b; }
+    .leave-form-body {
+        padding: 16px;
+    }
+    .leave-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 16px 20px;
+    }
+    .leave-field label {
+        color: #0f172a;
+        font-size: 11px;
+        margin-bottom: 7px;
+    }
+    .leave-field input,
+    .leave-field select,
+    .leave-field textarea {
+        width: 100%;
+        max-width: none;
+        min-height: 34px;
+        border-color: #d5dce5;
+        border-radius: 5px;
+        color: #0f172a;
+    }
+    .leave-field textarea {
+        min-height: 70px;
+        resize: vertical;
+    }
+    .leave-field select:disabled,
+    .leave-field input:disabled {
+        background: #e9edf2;
+        color: #102a43;
+        opacity: 1;
+    }
+    .leave-refresh {
+        color: #006df0;
+        font-weight: 800;
+        text-decoration: none;
+        font-size: 11px;
+    }
+    .leave-actions {
+        display: flex;
+        justify-content: center;
+        gap: 4px;
+        padding: 0 16px 14px;
+    }
+    .leave-actions .btn {
+        min-height: 30px;
+        padding: 6px 10px;
+        border-radius: 6px;
+        font-weight: 800;
+    }
+    .leave-actions .draft {
+        background: #f59e0b;
+        border-color: #f59e0b;
+        color: #ffffff;
+    }
+    .leave-actions .close {
+        background: #6b7280;
+        border-color: #6b7280;
+        color: #ffffff;
+    }
+    .button-icon {
+        display: inline-grid;
+        place-items: center;
+        width: 13px;
+        height: 13px;
+        margin-right: 4px;
+        border-radius: 2px;
+        font-size: 9px;
+        line-height: 1;
+    }
+    .leave-errors {
+        margin: 0 0 12px;
+        padding: 10px 12px;
+        border: 1px solid #fecaca;
+        border-radius: 6px;
+        background: #fef2f2;
+        color: #991b1b;
+    }
+    @media (max-width: 780px) {
+        .leave-grid { grid-template-columns: 1fr; }
+        .leave-actions { justify-content: flex-start; flex-wrap: wrap; }
+    }
+</style>
+
+<div class="leave-window">
+    <div class="leave-window-head">
+        <div class="leave-window-title">
+            <span aria-hidden="true">#</span>
+            <span>Leave and Attendance ...</span>
+        </div>
+        <a class="leave-close" href="{% url 'webcom:list' model_name %}" title="Close">x</a>
+    </div>
+
+    <div class="leave-section-bar">
+        <span>Apply for Leave Here!</span>
+        <div class="leave-tools" aria-hidden="true">
+            <span class="leave-tool blue">+</span>
+            <span class="leave-tool green">C</span>
+            <span class="leave-tool orange">-</span>
+        </div>
+    </div>
+
+    <form method="post" enctype="multipart/form-data" novalidate>
+        {% csrf_token %}
+        <div class="leave-form-body">
+            {% if form.non_field_errors %}
+                <div class="leave-errors">{{ form.non_field_errors }}</div>
+            {% endif %}
+            {% for hidden in form.hidden_fields %}{{ hidden }}{% endfor %}
+
+            <div class="leave-grid">
+                <div class="leave-field">
+                    {{ form.employee.label_tag }}
+                    {{ form.employee }}
+                    {{ form.employee.errors }}
+                </div>
+                <div class="leave-field">
+                    {{ form.hr_verifier.label_tag }}
+                    {{ form.hr_verifier }}
+                    {{ form.hr_verifier.errors }}
+                </div>
+
+                <div class="leave-field">
+                    {{ form.leave_type.label_tag }}
+                    {{ form.leave_type }}
+                    {{ form.leave_type.errors }}
+                </div>
+                <div class="leave-field">
+                    <label for="{{ form.supervisor.id_for_label }}">Supervisor <a class="leave-refresh" href="">Can't see your Supervisor, Click Here to refresh</a></label>
+                    {{ form.supervisor }}
+                    {{ form.supervisor.errors }}
+                </div>
+
+                <div class="leave-field">
+                    {{ form.start_date.label_tag }}
+                    {{ form.start_date }}
+                    {{ form.start_date.errors }}
+                </div>
+                <div class="leave-field">
+                    <label for="{{ form.hod.id_for_label }}">HOD <a class="leave-refresh" href="">Can't see your HOD, Click Here to refresh</a></label>
+                    {{ form.hod }}
+                    {{ form.hod.errors }}
+                </div>
+
+                <div class="leave-field">
+                    {{ form.end_date.label_tag }}
+                    {{ form.end_date }}
+                    {{ form.end_date.errors }}
+                </div>
+                <div class="leave-field">
+                    <label for="{{ form.stand_in_coworker.id_for_label }}">Stand-In Coworker <a class="leave-refresh" href="">Can't see your Co-Worker, Click Here to refresh</a></label>
+                    {{ form.stand_in_coworker }}
+                    {{ form.stand_in_coworker.errors }}
+                </div>
+
+                <div class="leave-field">
+                    {{ form.address_while_away.label_tag }}
+                    {{ form.address_while_away }}
+                    {{ form.address_while_away.errors }}
+                </div>
+                <div class="leave-field">
+                    {{ form.reason.label_tag }}
+                    {{ form.reason }}
+                    {{ form.reason.errors }}
+                </div>
+
+                <div class="leave-field">
+                    {{ form.emergency_contact.label_tag }}
+                    {{ form.emergency_contact }}
+                    {{ form.emergency_contact.errors }}
+                </div>
+            </div>
+        </div>
+
+        <div class="leave-actions">
+            <button class="btn primary" type="submit" name="action" value="submit"><span class="button-icon">S</span>Submit</button>
+            <button class="btn draft" type="submit" name="action" value="draft"><span class="button-icon">P</span>Save As Draft</button>
+            <a class="btn close" href="{% url 'webcom:list' model_name %}"><span class="button-icon">X</span>Close</a>
+        </div>
+    </form>
+</div>
+{% endblock %}

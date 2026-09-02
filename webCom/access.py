@@ -6,7 +6,7 @@ from django.shortcuts import redirect
 ROLE_GROUPS = {
     "Supervisor": {
         "models": {"attendance"},
-        "views": set(),
+        "views": {"leave_notifications", "leave_notification_action"},
     },
     "Human Resources": {
         "models": {
@@ -23,7 +23,7 @@ ROLE_GROUPS = {
             "advances",
             "payroll-deductions",
         },
-        "views": {"payroll"},
+        "views": {"leave_notifications", "leave_notification_action", "payroll"},
     },
     "Operations Manager": {
         "models": {
@@ -46,8 +46,11 @@ ROLE_GROUPS = {
             "duty_roster_export",
             "duty_roster_upload",
             "incident_notifications",
+            "incident_manage",
             "incident_notify",
             "incident_report",
+            "leave_notifications",
+            "leave_notification_action",
         },
     },
     "Finance Officer": {

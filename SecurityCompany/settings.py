@@ -19,6 +19,24 @@ from django.core.exceptions import ImproperlyConfigured
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
+
+
+def load_local_env(env_path):
+    """Load KEY=VALUE pairs from .env when the process has not set them."""
+    if not env_path.exists():
+        return
+    for line in env_path.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, value = line.split("=", 1)
+        key = key.strip()
+        value = value.strip().strip("\"'")
+        if key and key not in os.environ:
+            os.environ[key] = value
+
+
+load_local_env(BASE_DIR / ".env")
 IS_VERCEL = bool(os.environ.get("VERCEL") or os.environ.get("VERCEL_ENV") or os.environ.get("VERCEL_URL") or os.environ.get("VERCEL_REGION"))
 IS_VERCEL_RUNTIME = IS_VERCEL
 
@@ -90,6 +108,7 @@ FILE_UPLOAD_MAX_MEMORY_SIZE = int(os.environ.get("DJANGO_FILE_UPLOAD_MAX_MEMORY_
 # Application definition
 
 INSTALLED_APPS = [
+    'unfold',
     'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
@@ -98,6 +117,72 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
     "webCom",
 ]
+
+UNFOLD = {
+    "SITE_TITLE": "Turyans ERP Admin",
+    "SITE_HEADER": "Turyans Security ERP",
+    "SITE_SUBHEADER": "Operations, HR, Finance, and public site administration",
+    "SITE_SYMBOL": "shield",
+    "SHOW_HISTORY": True,
+    "SHOW_VIEW_ON_SITE": True,
+    "ENVIRONMENT": "SecurityCompany.settings.environment_callback",
+    "SIDEBAR": {
+        "show_search": True,
+        "show_all_applications": True,
+        "navigation": [
+            {
+                "title": "Operations",
+                "separator": True,
+                "items": [
+                    {"title": "Clients", "icon": "business", "link": "/admin/webCom/client/"},
+                    {"title": "Contracts", "icon": "contract", "link": "/admin/webCom/contract/"},
+                    {"title": "Sites", "icon": "location_on", "link": "/admin/webCom/site/"},
+                    {"title": "Deployments", "icon": "security", "link": "/admin/webCom/deployment/"},
+                    {"title": "Incidents", "icon": "report", "link": "/admin/webCom/incident/"},
+                    {"title": "Assets", "icon": "inventory_2", "link": "/admin/webCom/asset/"},
+                ],
+            },
+            {
+                "title": "Human Resources",
+                "separator": True,
+                "items": [
+                    {"title": "Employees", "icon": "badge", "link": "/admin/webCom/employee/"},
+                    {"title": "Attendance", "icon": "event_available", "link": "/admin/webCom/attendance/"},
+                    {"title": "Training", "icon": "school", "link": "/admin/webCom/training/"},
+                    {"title": "Leave", "icon": "event_busy", "link": "/admin/webCom/leave/"},
+                    {"title": "Disciplinary Actions", "icon": "gavel", "link": "/admin/webCom/disciplinary_action/"},
+                ],
+            },
+            {
+                "title": "Finance",
+                "separator": True,
+                "items": [
+                    {"title": "Salaries", "icon": "payments", "link": "/admin/webCom/salary/"},
+                    {"title": "Invoices", "icon": "receipt_long", "link": "/admin/webCom/invoice/"},
+                    {"title": "Payments", "icon": "account_balance", "link": "/admin/webCom/payment/"},
+                    {"title": "Budgets", "icon": "account_balance_wallet", "link": "/admin/webCom/budget/"},
+                    {"title": "Expenses", "icon": "request_quote", "link": "/admin/webCom/expense/"},
+                    {"title": "Procurement", "icon": "shopping_cart", "link": "/admin/webCom/procurementrequisition/"},
+                ],
+            },
+            {
+                "title": "Public Website",
+                "separator": True,
+                "items": [
+                    {"title": "Job Postings", "icon": "work", "link": "/admin/webCom/jobposting/"},
+                    {"title": "Applications", "icon": "assignment_ind", "link": "/admin/webCom/jobapplication/"},
+                    {"title": "Events", "icon": "campaign", "link": "/admin/webCom/companyevent/"},
+                    {"title": "Resources", "icon": "library_books", "link": "/admin/webCom/websiteresource/"},
+                ],
+            },
+        ],
+    },
+}
+
+
+def environment_callback(request):
+    return ["Development" if DEBUG else "Production", "warning" if DEBUG else "danger"]
+
 MIDDLEWARE = [
     'webCom.middleware.VercelConfigurationMiddleware',
     'django.middleware.security.SecurityMiddleware',

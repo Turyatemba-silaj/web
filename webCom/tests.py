@@ -12,10 +12,13 @@ from django.test import RequestFactory, SimpleTestCase, TestCase
 from django.urls import reverse
 from django.utils import timezone
 
-from .forms import DisciplinaryActionForm, ExpenseForm, InvoiceForm, PerformanceEvaluationForm, SiteForm
+from .forms_finance import ExpenseForm, InvoiceForm
+from .forms_hr import DisciplinaryActionForm, PerformanceEvaluationForm
+from .forms_operations import SiteForm
 from .middleware import RequestAuditMiddleware
-from .models import Advance, Attendance, AuditLog, Budget, BudgetNotification, Client, CompanyEvent, Contract, ContractDeliverable, Deployment, DeploymentArea, Disciplinary_Action, DisciplinaryNotification, Employee, Expense, ExpenseNotification, Invoice, InvoiceBillableItem, JobApplication, JobPosting, Leave, Paymee, PayrollDeduction, Payment, Performance_Evaluation, GoodsReceivedNote, ProcurementApproval, ProcurementRequisition, PurchaseOrder, Region, SupplierInvoice, SupplierPayment, SupplierProformaInvoice, SupplierProformaItemPrice, Shift, Site, Supplier, WebsiteAdvertisement, WebsiteResource, AssociatedLink
-from .views import build_monthly_roster_matrix, notify_disciplinary_employee, parse_scheduled_period, rotating_scheduled_guards, write_monthly_roster_csv
+from .models import Advance, Attendance, AuditLog, Budget, BudgetNotification, Client, CompanyEvent, Contract, ContractDeliverable, Deployment, DeploymentArea, Disciplinary_Action, DisciplinaryNotification, Employee, Expense, ExpenseNotification, Invoice, InvoiceBillableItem, JobApplication, JobPosting, Leave, LeaveNotification, Paymee, PayrollDeduction, Payment, Performance_Evaluation, GoodsReceivedNote, ProcurementApproval, ProcurementRequisition, PurchaseOrder, Region, SupplierInvoice, SupplierPayment, SupplierProformaInvoice, SupplierProformaItemPrice, Shift, Site, Supplier, WebsiteAdvertisement, WebsiteResource, AssociatedLink
+from .hr import notify_disciplinary_employee
+from .operations import build_monthly_roster_matrix, parse_scheduled_period, rotating_scheduled_guards, write_monthly_roster_csv
 
 def login_test_staff(client, username="staff"):
     user, _created = get_user_model().objects.get_or_create(username=username)
@@ -708,6 +711,47 @@ class LeaveReviewWorkflowTests(TestCase):
         self.assertEqual(leave.operations_verification_status, "rejected")
         self.assertEqual(leave.approval_status, "rejected")
         self.assertEqual(leave.feedback, "Staffing level is below minimum.")
+
+    def test_leave_submission_creates_actionable_notifications(self):
+        employee = self.make_employee("NoticeApplicant", "guard", "operations", "notice-applicant@example.com")
+        supervisor = self.make_employee("NoticeSupervisor", "supervisor", "operations", "notice-supervisor@example.com")
+        hod = self.make_employee("NoticeHod", "manager", "operations", "notice-hod@example.com")
+        stand_in = self.make_employee("NoticeStandIn", "guard", "operations", "notice-standin@example.com")
+        leave = Leave.objects.create(
+            employee=employee,
+            leave_type="annual",
+            start_date=date(2026, 9, 20),
+            end_date=date(2026, 9, 22),
+            reason="Family appointment",
+            address_while_away="Kampala",
+            emergency_contact="0700000000",
+            supervisor=supervisor,
+            hod=hod,
+            stand_in_coworker=stand_in,
+            application_status="submitted",
+        )
+
+        leave.notify_submission()
+
+        self.assertTrue(LeaveNotification.objects.filter(leave=leave, recipient=supervisor, recipient_group="Verifier").exists())
+        self.assertTrue(LeaveNotification.objects.filter(leave=leave, recipient=hod, recipient_group="Approver").exists())
+        self.assertTrue(LeaveNotification.objects.filter(leave=leave, recipient=stand_in, recipient_group="Stand-In").exists())
+
+        login_test_staff(self.client, "leave-notification-staff")
+        verifier_notification = leave.notifications.get(recipient=supervisor, recipient_group="Verifier")
+        response = self.client.post(reverse("webcom:leave_notification_action", args=[verifier_notification.pk, "verify"]))
+        self.assertEqual(response.status_code, 302)
+        leave.refresh_from_db()
+        self.assertEqual(leave.operations_verification_status, "verified")
+        self.assertEqual(leave.verified_by, supervisor)
+
+        approver_notification = leave.notifications.get(recipient=hod, recipient_group="Approver")
+        response = self.client.post(reverse("webcom:leave_notification_action", args=[approver_notification.pk, "approve"]))
+        self.assertEqual(response.status_code, 302)
+        leave.refresh_from_db()
+        self.assertEqual(leave.approval_status, "approved")
+        self.assertEqual(leave.approved_by, hod)
+        self.assertTrue(LeaveNotification.objects.filter(leave=leave, recipient=employee, notification_type="leave_approved").exists())
 
 class EmployeeNumberTests(TestCase):
     def make_employee(self, first_name, role, department, national_id):
