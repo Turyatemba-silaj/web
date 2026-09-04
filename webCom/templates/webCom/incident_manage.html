@@ -153,13 +153,19 @@
             <section class="incident-management-section">
                 <h2>Reporting</h2>
                 <div class="incident-field">{{ form.reported_to.label_tag }}{{ form.reported_to }}{{ form.reported_to.errors }}</div>
+                <div class="incident-field">{{ form.guards_on_duty.label_tag }}{{ form.guards_on_duty }}{{ form.guards_on_duty.errors }}</div>
+                <div class="incident-field">{{ form.alleged_stolen_items.label_tag }}{{ form.alleged_stolen_items }}{{ form.alleged_stolen_items.errors }}</div>
                 <div class="incident-field">{{ form.occurrence_summary.label_tag }}{{ form.occurrence_summary }}{{ form.occurrence_summary.errors }}</div>
                 <div class="incident-field">{{ form.immediate_action_taken.label_tag }}{{ form.immediate_action_taken }}{{ form.immediate_action_taken.errors }}</div>
             </section>
 
             <section class="incident-management-section">
                 <h2>Investigation</h2>
+                <div class="incident-field">{{ form.commencement_of_investigations.label_tag }}{{ form.commencement_of_investigations }}{{ form.commencement_of_investigations.errors }}</div>
+                <div class="incident-field">{{ form.police_case_reference.label_tag }}{{ form.police_case_reference }}{{ form.police_case_reference.errors }}</div>
+                <div class="incident-field">{{ form.suspects.label_tag }}{{ form.suspects }}{{ form.suspects.errors }}</div>
                 <div class="incident-field">{{ form.investigation_assigned_to.label_tag }}{{ form.investigation_assigned_to }}{{ form.investigation_assigned_to.errors }}</div>
+                <div class="incident-field">{{ form.affected_items_details.label_tag }}{{ form.affected_items_details }}{{ form.affected_items_details.errors }}</div>
                 <div class="incident-field">{{ form.investigation_findings.label_tag }}{{ form.investigation_findings }}{{ form.investigation_findings.errors }}</div>
             </section>
 

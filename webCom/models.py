@@ -222,6 +222,38 @@ class JobApplication(models.Model):
         ordering = ['-submitted_at']
 
 
+class JobApplicationNotification(models.Model):
+    notification_id = models.AutoField(primary_key=True)
+    application = models.ForeignKey(JobApplication, on_delete=models.CASCADE, related_name='notifications')
+    recipient = models.ForeignKey(Employee, on_delete=models.CASCADE, related_name='job_application_notifications')
+    recipient_group = models.CharField(max_length=50, default='Human Resource')
+    notification_type = models.CharField(max_length=40, default='new_application')
+    message = models.TextField()
+    STATUS_CHOICES = [
+        ('pending', 'Pending'),
+        ('sent', 'Sent'),
+        ('failed', 'Failed'),
+    ]
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending')
+    delivery_note = models.CharField(max_length=255, blank=True, default='')
+    notified_at = models.DateTimeField(default=timezone.now)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f"Application notification - {self.application}"
+
+    class Meta:
+        db_table = 'job_application_notifications'
+        ordering = ['-notified_at', '-notification_id']
+        constraints = [
+            models.UniqueConstraint(
+                fields=['application', 'recipient', 'notification_type'],
+                name='unique_job_application_notification',
+            ),
+        ]
+
+
 
 
 

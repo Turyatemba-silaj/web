@@ -1,11 +1,14 @@
 from django.contrib import messages
+from django.conf import settings
+from django.core.mail import send_mail
 from django.db import DatabaseError
+from django.db.models import Q
 from django.http import Http404
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 
 from .forms_public import PublicJobApplicationForm
-from .models import AssociatedLink, Client, CompanyEvent, Employee, JobApplication, JobPosting, Region, Site, WebsiteAdvertisement, WebsiteResource
+from .models import AssociatedLink, Client, CompanyEvent, Employee, JobApplication, JobApplicationNotification, JobPosting, Region, Site, WebsiteAdvertisement, WebsiteResource
 
 def public_site_context():
     today = timezone.localdate()
@@ -104,6 +107,81 @@ def careers(request):
     return public_render(request, "webCom/careers.html", context)
 
 
+def get_job_application_notification_recipients():
+    return (
+        Employee.objects.filter(status="active")
+        .filter(Q(department="hr") | Q(role="hr_officer") | Q(position="hr_officer"))
+        .exclude(email="")
+        .distinct()
+        .order_by("employee_number", "first_name", "last_name")
+    )
+
+
+def build_job_application_notification_message(application):
+    return (
+        f"New online job application received.\n\n"
+        f"Job: {application.job}\n"
+        f"Applicant: {application.applicant_name}\n"
+        f"Phone: {application.phone_number}\n"
+        f"Email: {application.email or '-'}\n"
+        f"Qualification: {application.qualification or '-'}\n"
+        f"Submitted at: {application.submitted_at}\n\n"
+        f"Open Human Resources > Job Applications to review the application."
+    )
+
+
+def deliver_job_application_notification(notification):
+    if not notification.recipient.email:
+        notification.status = "pending"
+        notification.delivery_note = "Recipient has no email address."
+        notification.save(update_fields=["status", "delivery_note", "updated_at"])
+        return
+    if not getattr(settings, "EMAIL_HOST", "") or "console.EmailBackend" in getattr(settings, "EMAIL_BACKEND", ""):
+        notification.status = "pending"
+        notification.delivery_note = "SMTP email is not configured; notification was stored only."
+        notification.notified_at = timezone.now()
+        notification.save(update_fields=["status", "delivery_note", "notified_at", "updated_at"])
+        return
+    try:
+        send_mail(
+            subject=f"New job application: {notification.application.job}",
+            message=notification.message,
+            from_email=getattr(settings, "DEFAULT_FROM_EMAIL", None),
+            recipient_list=[notification.recipient.email],
+            fail_silently=False,
+        )
+        notification.status = "sent"
+        notification.delivery_note = "Email notification sent."
+    except Exception as exc:
+        notification.status = "failed"
+        notification.delivery_note = str(exc)[:255]
+    notification.notified_at = timezone.now()
+    notification.save(update_fields=["status", "delivery_note", "notified_at", "updated_at"])
+
+
+def notify_hr_managers_of_job_application(application):
+    message = build_job_application_notification_message(application)
+    recipients = get_job_application_notification_recipients()
+    for employee in recipients:
+        notification, created = JobApplicationNotification.objects.get_or_create(
+            application=application,
+            recipient=employee,
+            notification_type="new_application",
+            defaults={
+                "recipient_group": "Human Resource",
+                "message": message,
+                "status": "pending",
+            },
+        )
+        if not created:
+            notification.message = message
+            notification.status = "pending"
+            notification.delivery_note = ""
+            notification.save(update_fields=["message", "status", "delivery_note", "updated_at"])
+        deliver_job_application_notification(notification)
+    return recipients.count()
+
+
 def job_detail(request, pk):
     job = get_object_or_404(JobPosting, pk=pk, is_active=True, is_online=True)
     if not job.is_open:
@@ -115,6 +193,7 @@ def job_detail(request, pk):
         application.job = job
         application.application_mode = "online"
         application.save()
+        notify_hr_managers_of_job_application(application)
         messages.success(request, "Your application has been received. Our team will review it and contact shortlisted candidates.")
         return redirect("webcom:job_detail", pk=job.pk)
     context = {

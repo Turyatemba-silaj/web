@@ -28,6 +28,7 @@
             <dt>Date Time</dt><dd>{{ object.date_time }}</dd>
             <dt>Location</dt><dd>{{ object.location }}</dd>
             <dt>Description</dt><dd>{{ object.description }}</dd>
+            <dt>Alleged Stolen Items / Incident Details</dt><dd>{{ object.alleged_stolen_items|default:"-" }}</dd>
             <dt>Occurrence Summary</dt><dd>{{ object.occurrence_summary|default:"-" }}</dd>
             <dt>Immediate Action Taken</dt><dd>{{ object.immediate_action_taken|default:"-" }}</dd>
         </dl>
@@ -69,6 +70,11 @@
     <section class="panel incident-section">
         <h2>Investigation</h2>
         <dl class="detail-list">
+            <dt>Commencement Of Investigations</dt><dd>{{ object.commencement_of_investigations|default:"-" }}</dd>
+            <dt>Police Case Reference</dt><dd>{{ object.police_case_reference|default:"-" }}</dd>
+            <dt>Suspect(s)</dt><dd>{{ object.suspects|default:"-" }}</dd>
+            <dt>Guards On Duty</dt><dd>{{ object.guards_on_duty|default:"-" }}</dd>
+            <dt>Missing / Affected Items</dt><dd>{{ object.affected_items_details|default:"-" }}</dd>
             <dt>Assigned To</dt><dd>{{ object.investigation_assigned_to|default:"-" }}</dd>
             <dt>Findings</dt><dd>{{ object.investigation_findings|default:"-" }}</dd>
         </dl>

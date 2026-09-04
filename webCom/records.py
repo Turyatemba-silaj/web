@@ -55,6 +55,29 @@ def asset_assignment_type_map():
         for asset in Asset.objects.only("pk", "asset_type")
     }
 
+
+def incident_guard_choices_by_site():
+    choices_by_site = {}
+    sites = Site.objects.select_related("region").filter(region__isnull=False).order_by("site_name")
+    for site in sites:
+        regions = site.deployment_area_regions()
+        guards = (
+            Employee.objects.filter(
+                role__in=("guard", "supervisor"),
+                status__in=("active", "on_leave"),
+                deployment_areas__region__in=regions,
+                deployment_areas__status="active",
+            )
+            .distinct()
+            .order_by("employee_number", "first_name", "last_name")
+        )
+        choices_by_site[str(site.pk)] = [
+            {"value": str(guard.pk), "label": str(guard)}
+            for guard in guards
+        ]
+    return choices_by_site
+
+
 def model_list(request, model_name):
     if model_name == "payroll":
         require_model_access(request, model_name)
@@ -382,6 +405,21 @@ def model_create(request, model_name):
     if config.get("managed_table"):
         messages.info(request, managed_table_message(config))
         return redirect("webcom:list", model_name=model_name)
+    if model_name == "incidents":
+        form = config["form"](request.POST or None, request.FILES or None, required_only=False)
+        if request.method == "POST" and form.is_valid():
+            incident = form.save()
+            messages.success(request, "Incident record created successfully.")
+            return redirect("webcom:detail", model_name=model_name, pk=incident.pk)
+        context = {
+            "model_name": model_name,
+            "title": "Add Incident",
+            "form": form,
+            "submit_label": "Save Incident",
+            "incident_form_layout": True,
+            "incident_guard_choices_by_site": incident_guard_choices_by_site(),
+        }
+        return render_page(request, "webCom/model_form.html", context, model_name)
     if model_name == "leaves":
         form = config["form"](request.POST or None, request.FILES or None, required_only=False)
         if request.method == "POST" and form.is_valid():
@@ -591,6 +629,7 @@ def model_create(request, model_name):
         "entry_field_labels": [field.label for field in entry_formset.empty_form.visible_fields()],
         "submit_label": "Save Records",
         "selected_approval_requisition": selected_approval_requisition,
+        "incident_form_layout": model_name == "incidents",
     }
     if model_name == "asset-assignments":
         context["asset_assignment_asset_types"] = asset_assignment_type_map()
@@ -706,7 +745,10 @@ def model_update(request, model_name, pk):
         "submit_label": "Save",
         "performance_evaluation_layout": model_name == "performance-evaluations",
         "invoice_form_layout": model_name == "invoices",
+        "incident_form_layout": model_name == "incidents",
     }
+    if model_name == "incidents":
+        context["incident_guard_choices_by_site"] = incident_guard_choices_by_site()
     if model_name == "asset-assignments":
         context["asset_assignment_asset_types"] = asset_assignment_type_map()
     return render_page(request, "webCom/model_form.html", context, model_name)

@@ -10,12 +10,12 @@ from django.contrib import messages
 from django.core.mail import send_mail
 from django.db import transaction
 from django.db.models import Q
-from django.http import HttpResponse
+from django.http import HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect
 from django.utils import timezone
 
 from .access import require_model_access, require_view_access
-from .forms_operations import DutyRosterExportForm, DutyRosterUploadForm, IncidentManagementForm
+from .forms_operations import DutyRosterExportForm, DutyRosterUploadForm, IncidentGuardsOnDutyMixin, IncidentManagementForm
 from .models import (
     Asset,
     AssetAssignment,
@@ -70,6 +70,13 @@ def deliver_incident_notification(notification):
         notification.save(update_fields=["status", "delivery_note", "updated_at"])
         return
 
+    if not getattr(settings, "EMAIL_HOST", "") or "console.EmailBackend" in getattr(settings, "EMAIL_BACKEND", ""):
+        notification.status = "pending"
+        notification.delivery_note = "SMTP email is not configured; notification was not sent to an inbox."
+        notification.notified_at = timezone.now()
+        notification.save(update_fields=["status", "delivery_note", "notified_at", "updated_at"])
+        return
+
     try:
         send_mail(
             subject=f"Incident alert: {notification.incident.get_severity_level_display()}",
@@ -85,6 +92,59 @@ def deliver_incident_notification(notification):
         notification.delivery_note = str(exc)[:255]
     notification.notified_at = timezone.now()
     notification.save(update_fields=["status", "delivery_note", "notified_at", "updated_at"])
+
+
+def send_incident_notifications(incident):
+    recipients = get_incident_authority_recipients()
+    if not recipients:
+        return {
+            "total_recipients": 0,
+            "sent_count": 0,
+            "failed_count": 0,
+            "pending_count": 0,
+            "results": [],
+        }
+
+    message = build_incident_notification_message(incident)
+    if incident.status == "reported":
+        incident.status = "notified"
+    incident.notification_summary = f"Authorities notified on {timezone.now().strftime('%Y-%m-%d %H:%M')}."
+    incident.save(update_fields=["status", "notification_summary", "updated_at"])
+
+    results = []
+    for employee, authority_group in recipients:
+        notification, created = IncidentNotification.objects.get_or_create(
+            incident=incident,
+            recipient=employee,
+            authority_group=authority_group,
+            defaults={"message": message, "status": "pending"},
+        )
+        if not created:
+            notification.message = message
+            notification.status = "pending"
+            notification.delivery_note = ""
+            notification.save(update_fields=["message", "status", "delivery_note", "updated_at"])
+        deliver_incident_notification(notification)
+        results.append(
+            {
+                "recipient_id": employee.pk,
+                "recipient": str(employee),
+                "email": employee.email,
+                "authority_group": authority_group,
+                "status": notification.status,
+                "delivery_note": notification.delivery_note,
+                "notified_at": notification.notified_at.isoformat() if notification.notified_at else None,
+            }
+        )
+
+    return {
+        "total_recipients": len(results),
+        "sent_count": sum(1 for result in results if result["status"] == "sent"),
+        "failed_count": sum(1 for result in results if result["status"] == "failed"),
+        "pending_count": sum(1 for result in results if result["status"] == "pending"),
+        "results": results,
+    }
+
 
 def relief_guard_capacity(required_count):
     return required_count + 1 if required_count > 0 else 0
@@ -114,11 +174,24 @@ def site_roster_staff(site, work_date):
     if not site or not work_date:
         return []
 
-    return list(
-        site.guards.filter(
+    assigned_staff = site.guards.filter(
+        role__in=("guard", "supervisor"),
+        status="active",
+    )
+    area_staff = Employee.objects.none()
+    area_regions = site.deployment_area_regions()
+    if area_regions.exists():
+        area_staff = Employee.objects.filter(
             role__in=("guard", "supervisor"),
             status="active",
-        ).order_by("employee_number", "first_name", "last_name")
+            deployment_areas__region__in=area_regions,
+            deployment_areas__status="active",
+            deployment_areas__start_date__lte=work_date,
+        ).filter(
+            Q(deployment_areas__end_date__isnull=True) | Q(deployment_areas__end_date__gte=work_date)
+        )
+    return list(
+        (assigned_staff | area_staff).distinct().order_by("employee_number", "first_name", "last_name")
     )
 
 def load_site_scheduled_guards(site, required_count, work_date):
@@ -134,20 +207,23 @@ def load_site_scheduled_guards(site, required_count, work_date):
         assigned_sites__isnull=False,
         is_reliever=False,
     ).exclude(assigned_sites=site)
-    available_guards = (
-        Employee.objects.filter(
-            role__in=("guard", "supervisor"),
-            status="active",
-            deployment_areas__region=site.region,
-            deployment_areas__status="active",
-            deployment_areas__start_date__lte=work_date,
+    area_regions = site.deployment_area_regions()
+    available_guards = Employee.objects.none()
+    if area_regions.exists():
+        available_guards = (
+            Employee.objects.filter(
+                role__in=("guard", "supervisor"),
+                status="active",
+                deployment_areas__region__in=area_regions,
+                deployment_areas__status="active",
+                deployment_areas__start_date__lte=work_date,
+            )
+            .filter(Q(deployment_areas__end_date__isnull=True) | Q(deployment_areas__end_date__gte=work_date))
+            .exclude(pk__in=assigned_elsewhere.values("pk"))
+            .exclude(assigned_sites=site)
+            .distinct()
+            .order_by("employee_number", "first_name", "last_name")[:needed]
         )
-        .filter(Q(deployment_areas__end_date__isnull=True) | Q(deployment_areas__end_date__gte=work_date))
-        .exclude(pk__in=assigned_elsewhere.values("pk"))
-        .exclude(assigned_sites=site)
-        .distinct()
-        .order_by("employee_number", "first_name", "last_name")[:needed]
-    )
     guards_to_add = list(available_guards)
     if guards_to_add:
         site.guards.add(*guards_to_add)
@@ -957,39 +1033,66 @@ def contract_report(request, pk):
 def incident_notify(request, pk):
     require_view_access(request, "incident_notify")
     incident = get_object_or_404(Incident, pk=pk)
-    recipients = get_incident_authority_recipients()
-
-    if not recipients:
+    delivery = send_incident_notifications(incident)
+    if delivery["total_recipients"] == 0:
         messages.warning(request, "No active supervisors, managers, or human resource staff were found.")
         return redirect("webcom:list", model_name="incidents")
 
-    message = build_incident_notification_message(incident)
-    if incident.status == "reported":
-        incident.status = "notified"
-    incident.notification_summary = f"Authorities notified on {timezone.now().strftime('%Y-%m-%d %H:%M')}."
-    incident.save(update_fields=["status", "notification_summary", "updated_at"])
-    delivered_count = 0
-    for employee, authority_group in recipients:
-        notification, created = IncidentNotification.objects.get_or_create(
-            incident=incident,
-            recipient=employee,
-            authority_group=authority_group,
-            defaults={"message": message, "status": "pending"},
-        )
-        if not created:
-            notification.message = message
-            notification.status = "pending"
-            notification.delivery_note = ""
-            notification.save(update_fields=["message", "status", "delivery_note", "updated_at"])
-        deliver_incident_notification(notification)
-        if notification.status == "sent":
-            delivered_count += 1
-
     messages.success(
         request,
-        f"Incident notification prepared for {len(recipients)} authority contact(s); {delivered_count} email(s) sent.",
+        f"Incident notification prepared for {delivery['total_recipients']} authority contact(s); {delivery['sent_count']} email(s) sent.",
     )
     return redirect("webcom:incident_notifications")
+
+
+def incident_notify_api(request, pk):
+    require_view_access(request, "incident_notify")
+    if request.method != "POST":
+        return JsonResponse(
+            {"error": {"code": "method_not_allowed", "message": "Only POST is supported by this API endpoint."}},
+            status=405,
+        )
+
+    incident = get_object_or_404(Incident.objects.select_related("site"), pk=pk)
+    delivery = send_incident_notifications(incident)
+    status_code = 200 if delivery["total_recipients"] else 404
+    return JsonResponse(
+        {
+            "incident": {
+                "id": incident.pk,
+                "type": incident.get_incident_type_display(),
+                "site": str(incident.site),
+                "severity": incident.get_severity_level_display(),
+                "status": incident.get_status_display(),
+            },
+            "email": {
+                "live_smtp_configured": bool(getattr(settings, "EMAIL_HOST", "")),
+                "backend": getattr(settings, "EMAIL_BACKEND", ""),
+                "from_email": getattr(settings, "DEFAULT_FROM_EMAIL", ""),
+            },
+            "delivery": delivery,
+        },
+        status=status_code,
+    )
+
+
+def site_deployment_area_guards_api(request, pk):
+    require_model_access(request, "incidents")
+    if request.method != "GET":
+        return JsonResponse(
+            {"error": {"code": "method_not_allowed", "message": "Only GET is supported by this API endpoint."}},
+            status=405,
+        )
+    site = get_object_or_404(Site.objects.select_related("region"), pk=pk)
+    regions = site.deployment_area_regions()
+    choices = IncidentGuardsOnDutyMixin.deployment_area_guard_choices(site)
+    return JsonResponse(
+        {
+            "site": {"id": site.pk, "name": site.site_name, "deployment_area": str(site.region) if site.region_id else ""},
+            "deployment_areas": list(regions.values_list("region_name", flat=True)),
+            "guards": [{"value": value, "label": label} for value, label in choices],
+        }
+    )
 
 
 def incident_manage(request, pk):
@@ -1028,6 +1131,30 @@ def incident_manage(request, pk):
     return render_page(request, "webCom/incident_manage.html", context, "incidents")
 
 
+def incident_affected_item_rows(incident):
+    rows = []
+    for line in (incident.affected_items_details or "").splitlines():
+        parts = [part.strip() for part in line.split("|")]
+        if not any(parts):
+            continue
+        rows.append(
+            {
+                "item": parts[0] if len(parts) > 0 else "",
+                "serial_number": parts[1] if len(parts) > 1 else "",
+                "engraved_number": parts[2] if len(parts) > 2 else "",
+            }
+        )
+    if not rows and (incident.alleged_stolen_items or incident.description):
+        rows.append(
+            {
+                "item": incident.alleged_stolen_items or incident.description,
+                "serial_number": "",
+                "engraved_number": "",
+            }
+        )
+    return rows
+
+
 def incident_investigation_report(request, pk):
     require_view_access(request, "incident_report")
     incident = get_object_or_404(
@@ -1041,6 +1168,7 @@ def incident_investigation_report(request, pk):
         pk=pk,
     )
     notifications = incident.notifications.select_related("recipient").order_by("notified_at", "notification_id")
+    site_guards = incident.site.guards.order_by("first_name", "last_name", "employee_number")
     context = {
         "title": f"Investigation Report - Incident {incident.pk}",
         "company_name": getattr(settings, "COMPANY_NAME", "TURYANS SECURITY COMPANY (U) LIMITED"),
@@ -1049,6 +1177,8 @@ def incident_investigation_report(request, pk):
         "client": incident.site.client,
         "contract": incident.site.contract,
         "notifications": notifications,
+        "site_guards": site_guards,
+        "affected_item_rows": incident_affected_item_rows(incident),
         "prepared_at": timezone.localtime(),
     }
     return render_page(request, "webCom/incident_investigation_report.html", context, "incidents")

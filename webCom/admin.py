@@ -8,7 +8,7 @@ from .models import (
     Disciplinary_Action, DisciplinaryNotification, Performance_Evaluation, Document, LeaveNotification,
     # Finance Department
     Salary, PayrollDeduction, Advance, AdvanceRecovery, Invoice, InvoiceBillableItem, InvoiceBillableItemPrice, Paymee, Payment, Supplier, ProcurementRequisition, ProcurementApproval, SupplierProformaInvoice, SupplierProformaItemPrice, SupplierProformaInvoiceItem, PurchaseOrder, GoodsReceivedNote, SupplierInvoice, SupplierPayment, ProcurementNotification, Budget, Expense, ExpenseNotification, BudgetNotification,
-    WebsiteAdvertisement, CompanyEvent, WebsiteResource, AssociatedLink, JobPosting, JobApplication
+    WebsiteAdvertisement, CompanyEvent, WebsiteResource, AssociatedLink, JobPosting, JobApplication, JobApplicationNotification
 )
 
 
@@ -528,6 +528,14 @@ class JobApplicationAdmin(ModelAdmin):
     list_display = ('applicant_name', 'job', 'application_mode', 'phone_number', 'status', 'submitted_at')
     list_filter = ('application_mode', 'status', 'job')
     search_fields = ('applicant_name', 'phone_number', 'email', 'job__title')
+
+
+@admin.register(JobApplicationNotification)
+class JobApplicationNotificationAdmin(ModelAdmin):
+    list_display = ('notification_id', 'application', 'recipient', 'recipient_group', 'status', 'notified_at')
+    list_filter = ('recipient_group', 'notification_type', 'status', 'notified_at')
+    search_fields = ('application__applicant_name', 'application__job__title', 'recipient__first_name', 'recipient__last_name', 'recipient__email', 'message')
+    readonly_fields = ('created_at', 'updated_at')
 
 
 

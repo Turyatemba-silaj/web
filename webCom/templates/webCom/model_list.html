@@ -51,7 +51,16 @@
                     <td class="record-select-col"><input type="checkbox" data-record-select value="{{ row.pk }}" aria-label="Select record {{ row.pk }}"></td>
                     {% for cell in row.cells %}
                         <td>
-                            {% if model_name == "assets" and cell.field == "assets_issued_out" %}
+                            {% if model_name == "job-applications" and cell.field == "resume" %}
+                                {% if row.object.resume %}
+                                    <div class="row-actions">
+                                        <a class="action-btn view" href="{% url 'webcom:job_application_resume' row.pk %}" target="_blank" rel="noopener" title="View resume">View</a>
+                                        <a class="action-btn secondary" href="{% url 'webcom:job_application_resume' row.pk %}?download=1" title="Download resume">Download</a>
+                                    </div>
+                                {% else %}
+                                    -
+                                {% endif %}
+                            {% elif model_name == "assets" and cell.field == "assets_issued_out" %}
                                 <a class="action-btn workflow" href="{% url 'webcom:asset_issued_out_detail' %}?{{ row.object.group_query }}" title="View issued out details">{{ cell.value }}</a>
                             {% else %}
                                 {{ cell.value }}
@@ -70,6 +79,7 @@
                                 {% if model_name == "leaves" %}<a class="action-btn workflow" href="{% url 'webcom:leave_review' row.pk %}" title="Review leave">Review</a>{% endif %}
                                 {% if model_name == "incidents" %}<a class="action-btn workflow" href="{% url 'webcom:incident_manage' row.pk %}" title="Manage incident">Manage</a>{% endif %}
                                 {% if model_name == "incidents" %}<a class="action-btn secondary" href="{% url 'webcom:incident_investigation_report' row.pk %}" title="Create investigation report">Report</a>{% endif %}
+                                {% if model_name == "job-applications" and row.object.resume %}<a class="action-btn workflow" href="{% url 'webcom:job_application_resume' row.pk %}" target="_blank" rel="noopener" title="View resume">Resume</a>{% endif %}
                                 {% if model_name == "salaries" %}<a class="action-btn workflow" href="{% url 'webcom:salary_payslip' row.pk %}" title="Open payslip">Payslip</a>{% endif %}
                                 {% if model_name == "invoices" %}<a class="action-btn workflow" href="{% url 'webcom:invoice_document' row.pk %}" title="Open invoice">Invoice</a>{% endif %}
                                 {% if model_name == "payments" %}<a class="action-btn workflow" href="{% url 'webcom:payment_receipt' row.pk %}" title="Open receipt">Receipt</a>{% endif %}

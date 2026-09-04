@@ -230,9 +230,10 @@ class Site(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
 
     LOCATION_REGION_KEYWORDS = {
+        'Greater Jinja': ('jinja',),
         'Central Region': ('kampala', 'kampala road', 'entebbe', 'wakiso', 'mukono', 'masaka', 'mpigi', 'mityana'),
         'Western Region': ('mbarara', 'fort portal', 'kabale', 'kasese', 'hoima', 'masindi', 'ntungamo', 'bushenyi'),
-        'Eastern Region': ('jinja', 'mbale', 'soroti', 'tororo', 'iganga', 'busia', 'pallisa'),
+        'Eastern Region': ('mbale', 'soroti', 'tororo', 'iganga', 'busia', 'pallisa'),
         'Northern Region': ('gulu', 'lira', 'arua', 'kitgum', 'moyo', 'adjumani', 'nebbi'),
     }
 
@@ -283,19 +284,29 @@ class Site(models.Model):
     def assigned_guards(self):
         return ", ".join(str(guard) for guard in self.guards.all()) or "-"
 
+    def deployment_area_regions(self):
+        region_names = []
+        if self.region_id:
+            region_names.append(self.region.region_name)
+        inferred_region = self.infer_region_from_location()
+        if inferred_region:
+            region_names.append(inferred_region.region_name)
+        return Region.objects.filter(region_name__in=region_names).distinct()
+
     @property
     def deployment_area_staff(self):
         today = timezone.localdate()
+        regions = self.deployment_area_regions()
+        if not regions.exists():
+            return "-"
         staff = Employee.objects.filter(
-            deployment_areas__region=self.region,
+            deployment_areas__region__in=regions,
             deployment_areas__status='active',
             deployment_areas__start_date__lte=today,
         ).filter(
             models.Q(deployment_areas__end_date__isnull=True)
             | models.Q(deployment_areas__end_date__gte=today)
         ).distinct().order_by('first_name', 'last_name')
-        if not self.region_id:
-            return "-"
         return ", ".join(str(employee) for employee in staff) or "-"
 
     @property
@@ -546,6 +557,16 @@ class Incident(models.Model):
     reported_by = models.CharField(max_length=255)
     reported_to = models.CharField(max_length=255, blank=True, default='')
     status = models.CharField(max_length=30, choices=STATUS_CHOICES, default='reported')
+    alleged_stolen_items = models.TextField(blank=True, default='')
+    commencement_of_investigations = models.DateField(blank=True, null=True)
+    police_case_reference = models.CharField(max_length=255, blank=True, default='')
+    suspects = models.TextField(blank=True, default='')
+    guards_on_duty = models.TextField(blank=True, default='')
+    affected_items_details = models.TextField(
+        blank=True,
+        default='',
+        help_text='Enter one item per line. Use: item | serial number | engraved number.',
+    )
     occurrence_summary = models.TextField(blank=True, default='')
     immediate_action_taken = models.TextField(blank=True, default='')
     notification_summary = models.TextField(blank=True, default='')
@@ -844,11 +865,12 @@ class Attendance(models.Model):
             return True
         if site.guards.filter(pk=employee.pk).exists():
             return True
-        if not site.region_id:
+        regions = site.deployment_area_regions()
+        if not regions.exists():
             return False
         return DeploymentArea.objects.filter(
             employee=employee,
-            region=site.region,
+            region__in=regions,
             status='active',
             start_date__lte=work_date,
         ).filter(models.Q(end_date__isnull=True) | models.Q(end_date__gte=work_date)).exists()

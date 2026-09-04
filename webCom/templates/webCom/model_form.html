@@ -73,7 +73,174 @@
 
         {% if form %}
             {{ form.non_field_errors }}
-            {% if performance_evaluation_layout %}
+            {% if incident_form_layout %}
+                <style>
+                    .incident-form-sections { display: grid; gap: 10px; }
+                    .incident-form-section { border: 1px solid var(--line); background: #f8fafc; padding: 10px; border-radius: 6px; }
+                    .incident-form-section h2 { margin: 0; font-size: 13px; color: #102a43; }
+                    .incident-section-toggle {
+                        width: 100%;
+                        border: 0;
+                        background: transparent;
+                        color: #102a43;
+                        cursor: pointer;
+                        display: flex;
+                        align-items: center;
+                        justify-content: space-between;
+                        gap: 8px;
+                        padding: 0;
+                        font: inherit;
+                        font-weight: 800;
+                        text-align: left;
+                    }
+                    .incident-section-toggle::after {
+                        content: "+";
+                        width: 22px;
+                        height: 22px;
+                        border: 1px solid var(--line);
+                        border-radius: 50%;
+                        display: inline-flex;
+                        align-items: center;
+                        justify-content: center;
+                        background: #ffffff;
+                    }
+                    .incident-form-section.is-open .incident-section-toggle::after { content: "-"; }
+                    .incident-section-body { margin-top: 8px; }
+                    .incident-form-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px 10px; }
+                    .incident-form-field { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+                    .incident-form-field label { margin: 0; font-weight: 700; font-size: 11px; color: #102a43; line-height: 1.2; }
+                    .incident-form-field input,
+                    .incident-form-field select,
+                    .incident-form-field textarea { width: 100%; max-width: none; min-width: 0; box-sizing: border-box; }
+                    .incident-form-field textarea { min-height: 70px; resize: vertical; }
+                    .incident-form-field.wide { grid-column: span 3; }
+                    .incident-form-field.half { grid-column: span 2; }
+                    .incident-form-field .errorlist { margin: 1px 0 0; padding-left: 14px; color: #b91c1c; font-size: 10px; }
+                    @media (max-width: 980px) {
+                        .incident-form-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+                        .incident-form-field.wide,
+                        .incident-form-field.half { grid-column: span 2; }
+                    }
+                    @media (max-width: 680px) {
+                        .incident-form-grid { grid-template-columns: 1fr; }
+                        .incident-form-field.wide,
+                        .incident-form-field.half { grid-column: 1; }
+                    }
+                </style>
+                <div class="incident-form-sections">
+                    {% for hidden in form.hidden_fields %}{{ hidden }}{% endfor %}
+                    <section class="incident-form-section is-open" data-incident-section>
+                        <h2><button class="incident-section-toggle" type="button" aria-expanded="true">Incident Particulars</button></h2>
+                        <div class="incident-section-body" data-incident-section-body>
+                        <div class="incident-form-grid">
+                            {% for field in form.visible_fields %}
+                                {% if field.name == "site" or field.name == "incident_type" or field.name == "date_time" or field.name == "location" or field.name == "severity_level" or field.name == "status" or field.name == "reported_by" or field.name == "reported_to" or field.name == "guards_on_duty" %}
+                                    <div class="incident-form-field" data-field="{{ field.name }}">
+                                        {{ field.label_tag }}
+                                        {{ field }}
+                                        {% if field.help_text %}<small class="helptext">{{ field.help_text }}</small>{% endif %}
+                                        {{ field.errors }}
+                                    </div>
+                                {% endif %}
+                            {% endfor %}
+                            {% for field in form.visible_fields %}
+                                {% if field.name == "description" %}
+                                    <div class="incident-form-field wide" data-field="{{ field.name }}">
+                                        {{ field.label_tag }}
+                                        {{ field }}
+                                        {% if field.help_text %}<small class="helptext">{{ field.help_text }}</small>{% endif %}
+                                        {{ field.errors }}
+                                    </div>
+                                {% endif %}
+                            {% endfor %}
+                        </div>
+                        </div>
+                    </section>
+                </div>
+                {{ incident_guard_choices_by_site|json_script:"incident-guard-choices-by-site" }}
+                <script>
+                    (function () {
+                        const sections = Array.from(document.querySelectorAll("[data-incident-section]"));
+                        const guardChoicesElement = document.getElementById("incident-guard-choices-by-site");
+                        const guardChoicesBySite = guardChoicesElement ? JSON.parse(guardChoicesElement.textContent) : {};
+                        const siteField = document.querySelector('[name="site"]');
+                        const guardsField = document.querySelector('[name="guards_on_duty"]');
+                        const guardsHelp = document.querySelector('[data-field="guards_on_duty"] .helptext');
+                        function setOpen(target) {
+                            sections.forEach(function (section) {
+                                const open = section === target;
+                                const body = section.querySelector("[data-incident-section-body]");
+                                const toggle = section.querySelector(".incident-section-toggle");
+                                section.classList.toggle("is-open", open);
+                                if (body) body.hidden = !open;
+                                if (toggle) toggle.setAttribute("aria-expanded", open ? "true" : "false");
+                            });
+                        }
+                        sections.forEach(function (section) {
+                            const toggle = section.querySelector(".incident-section-toggle");
+                            if (!toggle) return;
+                            toggle.addEventListener("click", function () {
+                                setOpen(section);
+                            });
+                            if (section.querySelector(".errorlist")) {
+                                setOpen(section);
+                            }
+                        });
+                        function renderGuardChoices(choices) {
+                            if (!siteField || !guardsField) return;
+                            const selectedOptions = Array.from(guardsField.selectedOptions).map(function (option) {
+                                return { value: option.value, label: option.textContent };
+                            });
+                            const selectedValues = new Set(selectedOptions.map(function (option) { return option.value; }));
+                            const choiceValues = new Set(choices.map(function (choice) { return choice.value; }));
+                            guardsField.replaceChildren();
+                            choices.forEach(function (choice) {
+                                const option = document.createElement("option");
+                                option.value = choice.value;
+                                option.textContent = choice.label;
+                                option.selected = selectedValues.has(choice.value);
+                                guardsField.appendChild(option);
+                            });
+                            selectedOptions.forEach(function (choice) {
+                                if (choiceValues.has(choice.value)) return;
+                                const option = document.createElement("option");
+                                option.value = choice.value;
+                                option.textContent = choice.label;
+                                option.selected = true;
+                                guardsField.appendChild(option);
+                            });
+                            if (guardsHelp) {
+                                guardsHelp.textContent = choices.length ? "" : "No guards are assigned to this site's deployment area.";
+                            }
+                        }
+                        function syncGuardChoices() {
+                            if (!siteField || !guardsField) return;
+                            if (!siteField.value) {
+                                renderGuardChoices([]);
+                                if (guardsHelp) guardsHelp.textContent = "Select a site to show guards from its deployment area.";
+                                return;
+                            }
+                            fetch("/api/sites/" + encodeURIComponent(siteField.value) + "/deployment-area-guards/", {
+                                headers: { "X-Requested-With": "XMLHttpRequest" }
+                            })
+                                .then(function (response) {
+                                    if (!response.ok) throw new Error("Guard lookup failed");
+                                    return response.json();
+                                })
+                                .then(function (payload) {
+                                    renderGuardChoices(payload.guards || []);
+                                })
+                                .catch(function () {
+                                    renderGuardChoices(guardChoicesBySite[siteField.value] || []);
+                                });
+                        }
+                        if (siteField && guardsField) {
+                            siteField.addEventListener("change", syncGuardChoices);
+                            syncGuardChoices();
+                        }
+                    })();
+                </script>
+            {% elif performance_evaluation_layout %}
                 <style>
                     .evaluation-compact { display: grid; gap: 8px; }
                     .evaluation-section { border: 1px solid var(--line); background: #f8fafc; padding: 8px; }
@@ -101,6 +268,7 @@
                                     <div class="evaluation-field" data-field="{{ field.name }}">
                                         {{ field.label_tag }}
                                         {{ field }}
+                                        {% if field.help_text %}<small class="helptext">{{ field.help_text }}</small>{% endif %}
                                         {{ field.errors }}
                                     </div>
                                 {% endif %}

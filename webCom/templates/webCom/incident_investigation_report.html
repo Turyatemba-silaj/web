@@ -5,192 +5,231 @@
 {% block content %}
 <style>
     .report-actions { display: flex; justify-content: flex-end; gap: 8px; margin-bottom: 10px; }
-    .investigation-sheet,
-    .investigation-sheet * { box-sizing: border-box; }
-    .investigation-sheet {
+    .investigation-document,
+    .investigation-document * { box-sizing: border-box; }
+    .investigation-document {
         width: 100%;
-        max-width: 820px;
+        max-width: 816px;
         margin: 0 auto;
         background: #fff;
         border: 1px solid #cfd8e3;
         color: #111827;
-        padding: 20px 24px;
-        font-size: 11px;
-        line-height: 1.35;
+        padding: 34px 46px;
+        font-family: "Times New Roman", Times, serif;
+        font-size: 12px;
+        line-height: 1.45;
     }
-    .report-header {
-        display: grid;
-        grid-template-columns: minmax(0, 1fr) 220px;
-        gap: 16px;
-        align-items: start;
-        border-bottom: 2px solid #24466f;
-        padding-bottom: 12px;
-    }
-    .company-name {
-        margin: 0;
-        color: #002b4f;
-        font-size: 18px;
+    .letter-date { text-align: right; margin-bottom: 18px; }
+    .address-block { text-transform: uppercase; line-height: 1.35; margin-bottom: 14px; }
+    .attention-line,
+    .salutation,
+    .subject-line { margin: 9px 0; }
+    .subject-line {
         font-weight: 700;
-        line-height: 1.15;
         text-transform: uppercase;
+        text-decoration: underline;
     }
-    .report-subtitle { margin-top: 5px; color: #24466f; }
-    .report-title-box { border: 1px solid #cfd8e3; }
-    .report-title-box h2 {
-        margin: 0;
-        padding: 8px 10px;
-        background: #24466f;
-        color: #fff;
-        font-size: 15px;
-        text-transform: uppercase;
-    }
-    .report-meta { width: 100%; border-collapse: collapse; table-layout: fixed; }
-    .report-meta th,
-    .report-meta td { border-top: 1px solid #d7dde5; padding: 5px 7px; vertical-align: top; }
-    .report-meta th { width: 46%; color: #24466f; background: #edf2f7; text-align: left; text-transform: uppercase; }
-    .report-section { margin-top: 13px; }
-    .section-title {
+    .report-section { margin-top: 14px; break-inside: avoid; }
+    .report-section h3 {
         margin: 0 0 6px;
-        color: #002b4f;
-        font-size: 11px;
+        font-size: 12px;
         font-weight: 700;
-        text-transform: uppercase;
+        text-decoration: underline;
     }
-    .detail-table,
+    .particulars-table,
+    .items-table,
     .notification-table,
-    .signoff-table {
+    .signature-table {
         width: 100%;
         border-collapse: collapse;
         table-layout: fixed;
+        border: 0;
         box-shadow: none;
         border-radius: 0;
+        margin-top: 6px;
     }
-    .detail-table th,
-    .detail-table td,
+    .particulars-table th,
+    .particulars-table td,
+    .items-table th,
+    .items-table td,
     .notification-table th,
     .notification-table td,
-    .signoff-table th,
-    .signoff-table td {
-        border: 1px solid #d7dde5;
-        padding: 7px 8px;
+    .signature-table th,
+    .signature-table td {
+        border: 1px solid #111827;
+        padding: 5px 7px;
         vertical-align: top;
+        min-width: 0;
         overflow-wrap: anywhere;
     }
-    .detail-table th,
+    .particulars-table th {
+        width: 34%;
+        text-align: left;
+        font-weight: 700;
+        background: #f7f7f7;
+    }
+    .items-table th,
     .notification-table th,
-    .signoff-table th {
-        background: #f3f6f9;
-        color: #102a43;
+    .signature-table th {
+        background: #f7f7f7;
+        font-weight: 700;
         text-align: left;
         text-transform: uppercase;
     }
-    .detail-table th { width: 28%; }
-    .narrative-box {
-        min-height: 58px;
-        border: 1px solid #d7dde5;
-        padding: 8px;
+    .items-table th:nth-child(1) { width: 38%; }
+    .items-table th:nth-child(2),
+    .items-table th:nth-child(3) { width: 31%; }
+    .numbered-list {
+        margin: 4px 0 0 18px;
+        padding: 0;
+    }
+    .numbered-list li { margin: 3px 0; padding-left: 3px; }
+    .narrative {
+        margin: 0;
         white-space: pre-wrap;
         overflow-wrap: anywhere;
     }
-    .status-pill {
-        display: inline-block;
-        border: 1px solid #9fb3c8;
-        padding: 1px 6px;
-        font-size: 9.5px;
-        font-weight: 700;
+    .placeholder-lines {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 10px;
+        margin-top: 8px;
+        min-height: 86px;
+    }
+    .evidence-box {
+        border: 1px solid #111827;
+        min-height: 72px;
+        padding: 6px;
+        text-align: center;
+        font-size: 10px;
         text-transform: uppercase;
     }
-    .signoff-table td { height: 56px; }
-    .client-note {
-        border: 1px solid #d7dde5;
-        padding: 8px;
-        background: #f8fafc;
-    }
-    @page { size: A4; margin: 10mm; }
+    .compiled-by { margin-top: 22px; line-height: 1.45; }
+    .signature-table td { height: 44px; }
+    @page { size: A4; margin: 18mm 16mm; }
     @media (max-width: 780px) {
-        .investigation-sheet { padding: 14px; }
-        .report-header { grid-template-columns: 1fr; }
+        .investigation-document { padding: 22px; }
+        .placeholder-lines { grid-template-columns: 1fr; }
     }
     @media print {
         .sidebar, .top-strip, .report-actions { display: none; }
         .app-shell { display: block; }
         main { width: 100%; margin: 0; padding: 0; }
         body { background: #fff; }
-        .investigation-sheet { border: 0; max-width: none; padding: 0; font-size: 10px; }
-        .report-section { margin-top: 10px; }
+        .investigation-document {
+            border: 0;
+            max-width: none;
+            padding: 0;
+            font-size: 11px;
+        }
     }
 </style>
 
 <div class="report-actions">
     <a class="btn" href="{% url 'webcom:detail' 'incidents' incident.pk %}">Back</a>
-    <button class="btn primary" type="button" onclick="window.print()">Print / Save PDF</button>
+    <button class="btn primary" type="button" onclick="window.print()">Download / Print PDF</button>
 </div>
 
-<section class="investigation-sheet">
-    <header class="report-header">
-        <div>
-            <h1 class="company-name">{{ company_name }}</h1>
-            <div class="report-subtitle">Security incident investigation report for client review and sign-off</div>
-        </div>
-        <div class="report-title-box">
-            <h2>Investigation Report</h2>
-            <table class="report-meta">
-                <tbody>
-                    <tr><th>Incident No.</th><td>{{ incident.incident_id }}</td></tr>
-                    <tr><th>Status</th><td><span class="status-pill">{{ incident.get_status_display }}</span></td></tr>
-                    <tr><th>Prepared</th><td>{{ prepared_at }}</td></tr>
-                </tbody>
-            </table>
-        </div>
-    </header>
+<article class="investigation-document">
+    <div class="letter-date">Date: {{ prepared_at|date:"jS F Y" }}</div>
+
+    <div class="address-block">
+        {% if client %}
+            {{ client.contact_person|default:"Client Representative" }}<br>
+            {{ client.client_name }}<br>
+            {{ client.address|linebreaksbr }}<br>
+            PHONE: {{ client.phone_number|default:"-" }} | EMAIL: {{ client.email|default:"-" }}
+        {% else %}
+            Client Representative<br>
+            Client Organisation<br>
+            Client Address
+        {% endif %}
+    </div>
+
+    <p class="attention-line">Attention: {% if client %}{{ client.contact_person|default:"Client Representative" }}{% else %}Client Representative{% endif %}</p>
+    <p class="salutation">Dear Sir/Madam,</p>
+    <p class="subject-line">RE: Investigations Report About {{ incident.get_incident_type_display }} At {{ site.site_name }}</p>
+
+    <table class="particulars-table">
+        <tbody>
+            <tr><th>Subject of investigations</th><td>{{ incident.get_incident_type_display }}</td></tr>
+            <tr><th>Date of incident</th><td>{{ incident.date_time|date:"jS F Y" }}</td></tr>
+            <tr><th>Office Name</th><td>{{ site.site_name }}</td></tr>
+            <tr><th>Scene of incident</th><td>{{ incident.location }}</td></tr>
+            <tr><th>Incident reported by</th><td>{{ incident.reported_by }}</td></tr>
+            <tr><th>Alleged stolen items / incident details</th><td>{{ incident.alleged_stolen_items|default:incident.description }}</td></tr>
+            <tr><th>Commencement of investigations</th><td>{{ incident.commencement_of_investigations|default:incident.created_at|date:"jS F Y" }}</td></tr>
+            <tr><th>Police case reference</th><td>{{ incident.police_case_reference|default:"-" }}</td></tr>
+            <tr><th>Suspect(s)</th><td>{{ incident.suspects|default:"-" }}</td></tr>
+            <tr>
+                <th>Guards on duty</th>
+                <td>
+                    {% if incident.guards_on_duty %}
+                        {{ incident.guards_on_duty|linebreaksbr }}
+                    {% else %}
+                        {% for guard in site_guards %}
+                            {{ guard }}{% if not forloop.last %}, {% endif %}
+                        {% empty %}
+                            -
+                        {% endfor %}
+                    {% endif %}
+                </td>
+            </tr>
+        </tbody>
+    </table>
 
     <section class="report-section">
-        <h3 class="section-title">Client And Site</h3>
-        <table class="detail-table">
+        <h3>Details of Missing / Affected Items</h3>
+        <table class="items-table">
+            <thead>
+                <tr>
+                    <th>Item Stolen / Affected</th>
+                    <th>Serial Number</th>
+                    <th>Engraved Number</th>
+                </tr>
+            </thead>
             <tbody>
-                <tr><th>Client</th><td>{% if client %}{{ client.client_name }}{% else %}-{% endif %}</td></tr>
-                <tr><th>Client Contact</th><td>{% if client %}{{ client.contact_person }}{% else %}-{% endif %}</td></tr>
-                <tr><th>Phone / Email</th><td>{% if client %}{{ client.phone_number }} / {{ client.email }}{% else %}-{% endif %}</td></tr>
-                <tr><th>Site</th><td>{{ site.site_name }}</td></tr>
-                <tr><th>Site Address</th><td>{{ site.site_address }}</td></tr>
-                <tr><th>Region</th><td>{% if site.region %}{{ site.region }}{% else %}-{% endif %}</td></tr>
-                <tr><th>Contract</th><td>{% if contract %}{{ contract.contract_number|default:contract }}{% else %}-{% endif %}</td></tr>
+                {% for row in affected_item_rows %}
+                    <tr>
+                        <td>{{ row.item }}</td>
+                        <td>{{ row.serial_number }}</td>
+                        <td>{{ row.engraved_number }}</td>
+                    </tr>
+                {% endfor %}
+                <tr><td></td><td></td><td></td></tr>
+                <tr><td></td><td></td><td></td></tr>
             </tbody>
         </table>
     </section>
 
     <section class="report-section">
-        <h3 class="section-title">Incident Details</h3>
-        <table class="detail-table">
-            <tbody>
-                <tr><th>Date And Time</th><td>{{ incident.date_time }}</td></tr>
-                <tr><th>Location</th><td>{{ incident.location }}</td></tr>
-                <tr><th>Incident Type</th><td>{{ incident.get_incident_type_display }}</td></tr>
-                <tr><th>Severity</th><td>{{ incident.get_severity_level_display }}</td></tr>
-                <tr><th>Reported By</th><td>{{ incident.reported_by }}</td></tr>
-                <tr><th>Reported To</th><td>{{ incident.reported_to|default:"-" }}</td></tr>
-            </tbody>
-        </table>
+        <h3>Introduction:</h3>
+        <p class="narrative">On {{ incident.created_at|date:"jS F Y" }}, {{ company_name }} received a report from {{ incident.reported_by }} regarding {{ incident.get_incident_type_display|lower }} at {{ site.site_name }}. The incident was recorded for investigation, management review, client update and closure.</p>
     </section>
 
     <section class="report-section">
-        <h3 class="section-title">Occurrence Description</h3>
-        <div class="narrative-box">{{ incident.description }}</div>
+        <h3>Objectives of the investigations:</h3>
+        <ol class="numbered-list">
+            <li>To establish whether the reported incident happened.</li>
+            <li>To establish the circumstances under which the incident took place.</li>
+            <li>To identify persons, process gaps or security weaknesses connected to the incident.</li>
+            <li>To recommend appropriate corrective and preventive action.</li>
+        </ol>
     </section>
 
     <section class="report-section">
-        <h3 class="section-title">Occurrence Summary</h3>
-        <div class="narrative-box">{{ incident.occurrence_summary|default:"-" }}</div>
+        <h3>Investigations Team:</h3>
+        <p class="narrative">{% if incident.investigation_assigned_to %}{{ incident.investigation_assigned_to }}{% else %}Investigation officer to be assigned{% endif %}</p>
     </section>
 
     <section class="report-section">
-        <h3 class="section-title">Immediate Action Taken</h3>
-        <div class="narrative-box">{{ incident.immediate_action_taken|default:"-" }}</div>
+        <h3>Action Taken:</h3>
+        <p class="narrative">{{ incident.immediate_action_taken|default:"-" }}</p>
     </section>
 
     <section class="report-section">
-        <h3 class="section-title">Notification Record</h3>
-        <div class="narrative-box">{{ incident.notification_summary|default:"-" }}</div>
+        <h3>Notification Record</h3>
+        <p class="narrative">{{ incident.notification_summary|default:"-" }}</p>
         <table class="notification-table">
             <thead>
                 <tr>
@@ -198,7 +237,6 @@
                     <th>Authority</th>
                     <th>Status</th>
                     <th>Notified At</th>
-                    <th>Delivery Note</th>
                 </tr>
             </thead>
             <tbody>
@@ -208,47 +246,46 @@
                         <td>{{ notification.authority_group }}</td>
                         <td>{{ notification.get_status_display }}</td>
                         <td>{{ notification.notified_at }}</td>
-                        <td>{{ notification.delivery_note|default:"-" }}</td>
                     </tr>
                 {% empty %}
-                    <tr><td colspan="5">No notification records captured.</td></tr>
+                    <tr><td colspan="4">No notification records captured.</td></tr>
                 {% endfor %}
             </tbody>
         </table>
     </section>
 
     <section class="report-section">
-        <h3 class="section-title">Investigation Findings</h3>
-        <table class="detail-table">
-            <tbody>
-                <tr><th>Investigator</th><td>{{ incident.investigation_assigned_to|default:"-" }}</td></tr>
-            </tbody>
-        </table>
-        <div class="narrative-box">{{ incident.investigation_findings|default:"-" }}</div>
+        <h3>Findings</h3>
+        <p class="narrative">{{ incident.investigation_findings|default:"-" }}</p>
     </section>
 
     <section class="report-section">
-        <h3 class="section-title">Corrective Action And Prevention</h3>
-        <div class="narrative-box">{{ incident.corrective_action|default:"-" }}</div>
+        <h3>Observations</h3>
+        <p class="narrative">{{ incident.occurrence_summary|default:"-" }}</p>
     </section>
 
     <section class="report-section">
-        <h3 class="section-title">Conclusion</h3>
-        <div class="narrative-box">{{ incident.conclusion|default:"-" }}</div>
-        <table class="detail-table">
-            <tbody>
-                <tr><th>Closed By</th><td>{{ incident.closed_by|default:"-" }}</td></tr>
-                <tr><th>Closed At</th><td>{{ incident.closed_at|default:"-" }}</td></tr>
-            </tbody>
-        </table>
+        <h3>Recommendations</h3>
+        <p class="narrative">{{ incident.corrective_action|default:"-" }}</p>
     </section>
 
     <section class="report-section">
-        <h3 class="section-title">Sign-Off And Client Sharing</h3>
-        <div class="client-note">
-            This report is prepared for management approval, client acknowledgement, and sharing with the client after sign-off.
+        <h3>Conclusion</h3>
+        <p class="narrative">{{ incident.conclusion|default:"-" }}</p>
+    </section>
+
+    <section class="report-section">
+        <h3>Below are pictorial evidences of the incident</h3>
+        <div class="placeholder-lines">
+            <div class="evidence-box">Evidence photo 1</div>
+            <div class="evidence-box">Evidence photo 2</div>
+            <div class="evidence-box">Evidence photo 3</div>
         </div>
-        <table class="signoff-table">
+    </section>
+
+    <section class="report-section">
+        <h3>Sign-Off And Client Sharing</h3>
+        <table class="signature-table">
             <thead>
                 <tr>
                     <th>Role</th>
@@ -258,12 +295,20 @@
                 </tr>
             </thead>
             <tbody>
-                <tr><td>Prepared By / Operations</td><td></td><td></td><td></td></tr>
-                <tr><td>Investigator</td><td>{{ incident.investigation_assigned_to|default:"" }}</td><td></td><td></td></tr>
+                <tr><td>Compiled By</td><td>{% if incident.investigation_assigned_to %}{{ incident.investigation_assigned_to }}{% endif %}</td><td></td><td></td></tr>
+                <tr><td>Operations Approval</td><td></td><td></td><td></td></tr>
                 <tr><td>Management Approval</td><td></td><td></td><td></td></tr>
                 <tr><td>Client Acknowledgement</td><td>{% if client %}{{ client.contact_person }}{% endif %}</td><td></td><td></td></tr>
             </tbody>
         </table>
     </section>
-</section>
+
+    <div class="compiled-by">
+        Compiled by<br>
+        {% if incident.investigation_assigned_to %}{{ incident.investigation_assigned_to }}{% else %}................................................{% endif %}<br>
+        {{ company_name }}<br>
+        Status: {{ incident.get_status_display }}<br>
+        Closed By: {{ incident.closed_by|default:"-" }}{% if incident.closed_at %} | Closed At: {{ incident.closed_at }}{% endif %}
+    </div>
+</article>
 {% endblock %}

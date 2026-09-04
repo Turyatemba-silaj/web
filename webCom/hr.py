@@ -1,15 +1,17 @@
 from datetime import timedelta
+import mimetypes
 
 from django.conf import settings
 from django.contrib import messages
 from django.core.mail import send_mail
+from django.http import FileResponse, Http404
 from django.shortcuts import get_object_or_404, redirect
 from django.utils import timezone
 
 from .access import require_model_access, require_view_access
 from .finance import sync_salary_table
 from .forms_hr import EmployeeDeploymentTransferForm, LeaveReviewForm
-from .models import DisciplinaryNotification, Document, Employee, Leave, LeaveNotification, Training
+from .models import DisciplinaryNotification, Document, Employee, JobApplication, Leave, LeaveNotification, Training
 from .views import render_page
 
 def document_status(document, today=None):
@@ -83,6 +85,21 @@ def employee_transfer(request, pk):
         "submit_label": "Transfer",
     }
     return render_page(request, "webCom/model_form.html", context, "employees")
+
+
+def job_application_resume(request, pk):
+    require_model_access(request, "job-applications")
+    application = get_object_or_404(JobApplication, pk=pk)
+    if not application.resume:
+        raise Http404("This application has no resume attached.")
+    filename = application.resume.name.rsplit("/", 1)[-1]
+    content_type = mimetypes.guess_type(filename)[0] or "application/octet-stream"
+    return FileResponse(
+        application.resume.open("rb"),
+        as_attachment=request.GET.get("download") == "1",
+        filename=filename,
+        content_type=content_type,
+    )
 
 def build_leave_feedback_message(leave):
     decision = leave.get_approval_status_display()

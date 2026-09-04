@@ -1,6 +1,7 @@
 from django import forms
 from django.db.models import Q
 from django.forms import inlineformset_factory, modelformset_factory
+from django.utils.dateparse import parse_datetime
 from django.utils import timezone
 
 from .forms_base import DATE_WIDGET, DATETIME_WIDGET, TIME_WIDGET, DateRangeValidationMixin, StyledModelForm, get_default_shift
@@ -117,9 +118,16 @@ class SiteForm(StyledModelForm):
             return base_queryset.none()
         today = timezone.localdate()
         assigned_ids = list(self.instance.guards.values_list("pk", flat=True)) if self.instance and self.instance.pk else []
+        selected_region = Region.objects.filter(pk=region_id).first()
+        site_for_regions = Site(
+            region=selected_region,
+            site_name=self.data.get(self.add_prefix("site_name"), "") if self.is_bound else getattr(self.instance, "site_name", ""),
+            site_address=self.data.get(self.add_prefix("site_address"), "") if self.is_bound else getattr(self.instance, "site_address", ""),
+        )
+        region_ids = list(site_for_regions.deployment_area_regions().values_list("pk", flat=True)) or [region_id]
         return (
             base_queryset.filter(
-                Q(deployment_areas__region_id=region_id, deployment_areas__status="active", deployment_areas__start_date__lte=today)
+                Q(deployment_areas__region_id__in=region_ids, deployment_areas__status="active", deployment_areas__start_date__lte=today)
                 & (Q(deployment_areas__end_date__isnull=True) | Q(deployment_areas__end_date__gte=today))
                 | Q(pk__in=assigned_ids)
             )
@@ -128,15 +136,18 @@ class SiteForm(StyledModelForm):
         )
 
     @staticmethod
-    def guards_outside_deployment_area(guards, region):
-        if not region or guards is None:
+    def guards_outside_deployment_area(guards, site):
+        if not site or guards is None:
             return []
         today = timezone.localdate()
         guard_ids = [guard.pk for guard in guards]
+        region_ids = list(site.deployment_area_regions().values_list("pk", flat=True))
+        if not region_ids:
+            return list(guards)
         area_guard_ids = set(
             Employee.objects.filter(
                 pk__in=guard_ids,
-                deployment_areas__region=region,
+                deployment_areas__region_id__in=region_ids,
                 deployment_areas__status="active",
                 deployment_areas__start_date__lte=today,
             )
@@ -177,7 +188,12 @@ class SiteForm(StyledModelForm):
             required_guards = day_shift_guards + night_shift_guards
             if required_guards and guards.count() < required_guards:
                 self.add_error("guards", "Assign at least the total day and night guards required for this site.")
-            outside_area_guards = self.guards_outside_deployment_area(guards, cleaned_data.get("region"))
+            site_for_area = Site(
+                region=cleaned_data.get("region"),
+                site_name=cleaned_data.get("site_name") or "",
+                site_address=cleaned_data.get("site_address") or "",
+            )
+            outside_area_guards = self.guards_outside_deployment_area(guards, site_for_area)
             if outside_area_guards:
                 self.add_error("guards", "Assign guards from this site's deployment area only: " + ", ".join(str(guard) for guard in outside_area_guards))
             conflicts = site_assignment_conflicts(guards, site=self.instance)
@@ -450,18 +466,194 @@ class AttendanceForm(StyledModelForm):
         widgets = {"date": DATE_WIDGET, "time_in": TIME_WIDGET, "time_out": TIME_WIDGET}
 
 
-class IncidentForm(StyledModelForm):
+class IncidentGuardsOnDutyMixin:
+    def selected_incident_site(self):
+        site_id = self.data.get("site") if self.is_bound else None
+        if site_id:
+            return Site.objects.filter(pk=site_id).select_related("region").first()
+        if getattr(self.instance, "site_id", None):
+            return self.instance.site
+        return None
+
+    def selected_incident_date(self):
+        raw_date_time = self.data.get("date_time") if self.is_bound else None
+        if raw_date_time:
+            parsed = parse_datetime(raw_date_time)
+            if parsed:
+                return parsed.date()
+        if getattr(self.instance, "date_time", None):
+            return timezone.localtime(self.instance.date_time).date()
+        return timezone.localdate()
+
+    @staticmethod
+    def deployment_area_regions_for_site(site):
+        return site.deployment_area_regions() if site else Region.objects.none()
+
+    @staticmethod
+    def deployment_area_guard_choices(site):
+        regions = IncidentGuardsOnDutyMixin.deployment_area_regions_for_site(site)
+        if not regions.exists():
+            return []
+        guards = (
+            Employee.objects.filter(
+                role__in=("guard", "supervisor"),
+                status__in=("active", "on_leave"),
+                deployment_areas__region__in=regions,
+                deployment_areas__status="active",
+            )
+            .distinct()
+            .order_by("employee_number", "first_name", "last_name")
+        )
+        return [(str(guard.pk), str(guard)) for guard in guards]
+
+    def setup_guards_on_duty_field(self):
+        site = self.selected_incident_site()
+        choices = self.deployment_area_guard_choices(site)
+        existing_names = [name.strip() for name in (self.instance.guards_on_duty or "").replace(",", "\n").splitlines() if name.strip()]
+        selected = [value for value, label in choices if label in existing_names]
+        existing_choice_values = set(value for value, _label in choices)
+        for name in existing_names:
+            if name not in dict(choices).values():
+                value = f"saved:{name}"
+                choices.append((value, name))
+                selected.append(value)
+                existing_choice_values.add(value)
+        self.fields["guards_on_duty"].choices = choices
+        if selected:
+            self.initial["guards_on_duty"] = selected
+        if not site:
+            self.fields["guards_on_duty"].help_text = "Select a site to show guards from its deployment area."
+        elif not choices:
+            self.fields["guards_on_duty"].help_text = "No active guards or supervisors are assigned to this site's deployment area."
+        else:
+            self.fields["guards_on_duty"].help_text = "Showing guards assigned to the selected site's deployment area."
+
+    def save_guards_on_duty(self, incident):
+        guard_values = self.cleaned_data.get("guards_on_duty") or []
+        guard_ids = [value for value in guard_values if str(value).isdigit()]
+        saved_names = [str(value).replace("saved:", "", 1) for value in guard_values if str(value).startswith("saved:")]
+        guards = Employee.objects.filter(pk__in=guard_ids).order_by("employee_number", "first_name", "last_name")
+        guard_names = [str(guard) for guard in guards]
+        incident.guards_on_duty = ", ".join([*guard_names, *saved_names])
+
+
+class IncidentForm(IncidentGuardsOnDutyMixin, StyledModelForm):
+    reported_by = forms.ChoiceField(
+        choices=(),
+        required=True,
+        widget=forms.Select(attrs={"class": "form-control"}),
+    )
+    reported_to = forms.ChoiceField(
+        choices=(),
+        required=False,
+        widget=forms.Select(attrs={"class": "form-control"}),
+    )
+    guards_on_duty = forms.MultipleChoiceField(
+        choices=(),
+        required=False,
+        widget=forms.SelectMultiple(attrs={"class": "form-control", "size": 5}),
+    )
+
     class Meta:
         model = Incident
-        fields = "__all__"
-        widgets = {"date_time": DATETIME_WIDGET}
+        fields = [
+            "site",
+            "incident_type",
+            "date_time",
+            "location",
+            "severity_level",
+            "status",
+            "reported_by",
+            "reported_to",
+            "description",
+            "guards_on_duty",
+        ]
+        labels = {
+            "reported_by": "Reported By",
+            "guards_on_duty": "Guards On Duty",
+        }
+        widgets = {
+            "date_time": DATETIME_WIDGET,
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.setup_reported_by_field()
+        self.setup_reported_to_field()
+        self.setup_guards_on_duty_field()
+
+    def setup_reported_by_field(self):
+        supervisors = Employee.objects.filter(role="supervisor").exclude(status="inactive").order_by("employee_number", "first_name", "last_name")
+        managers = Employee.objects.filter(role="manager").exclude(status="inactive").order_by("employee_number", "first_name", "last_name")
+        employees = [*supervisors, *managers]
+        choices = [("", "Select employee..."), *[(str(employee.pk), str(employee)) for employee in employees]]
+        existing_name = (self.instance.reported_by or "").strip()
+        selected = ""
+        for value, label in choices:
+            if label == existing_name:
+                selected = value
+                break
+        if existing_name and not selected:
+            selected = f"saved:{existing_name}"
+            choices.append((selected, existing_name))
+        self.fields["reported_by"].choices = choices
+        if selected:
+            self.initial["reported_by"] = selected
+        self.fields["reported_by"].help_text = "Employees listed from supervisors to managers."
+
+    def setup_reported_to_field(self):
+        choices = [
+            ("", "Select recipient..."),
+            ("Control Room", "Control Room"),
+            ("Manager", "Manager"),
+            ("Police", "Police"),
+        ]
+        existing_value = (self.instance.reported_to or "").strip()
+        selected = existing_value if existing_value in dict(choices) else ""
+        if existing_value and not selected:
+            selected = existing_value
+            choices.append((existing_value, existing_value))
+        self.fields["reported_to"].choices = choices
+        if selected:
+            self.initial["reported_to"] = selected
+
+    def save(self, commit=True):
+        incident = super().save(commit=False)
+        reported_by = self.cleaned_data.get("reported_by") or ""
+        if str(reported_by).startswith("saved:"):
+            incident.reported_by = str(reported_by).replace("saved:", "", 1)
+        elif str(reported_by).isdigit():
+            reporter = Employee.objects.filter(pk=reported_by).first()
+            incident.reported_by = str(reporter) if reporter else ""
+        self.save_guards_on_duty(incident)
+        if commit:
+            incident.save()
+            self.save_m2m()
+        return incident
 
 
-class IncidentManagementForm(StyledModelForm):
+class IncidentManagementForm(IncidentGuardsOnDutyMixin, StyledModelForm):
+    reported_to = forms.ChoiceField(
+        choices=(),
+        required=False,
+        widget=forms.Select(attrs={"class": "form-control"}),
+    )
+    guards_on_duty = forms.MultipleChoiceField(
+        choices=(),
+        required=False,
+        widget=forms.SelectMultiple(attrs={"class": "form-control", "size": 5}),
+    )
+
     class Meta:
         model = Incident
         fields = [
             "reported_to",
+            "alleged_stolen_items",
+            "commencement_of_investigations",
+            "police_case_reference",
+            "suspects",
+            "guards_on_duty",
+            "affected_items_details",
             "occurrence_summary",
             "immediate_action_taken",
             "investigation_assigned_to",
@@ -472,6 +664,12 @@ class IncidentManagementForm(StyledModelForm):
         ]
         labels = {
             "reported_to": "Reported To",
+            "alleged_stolen_items": "Alleged Stolen Items / Incident Details",
+            "commencement_of_investigations": "Commencement Of Investigations",
+            "police_case_reference": "Police Case Reference",
+            "suspects": "Suspect(s)",
+            "guards_on_duty": "Guards On Duty",
+            "affected_items_details": "Details Of Missing / Affected Items",
             "occurrence_summary": "Occurrence Summary",
             "immediate_action_taken": "Immediate Action Taken",
             "investigation_assigned_to": "Investigation Assigned To",
@@ -481,6 +679,10 @@ class IncidentManagementForm(StyledModelForm):
             "closed_by": "Closed By",
         }
         widgets = {
+            "commencement_of_investigations": DATE_WIDGET,
+            "alleged_stolen_items": forms.Textarea(attrs={"rows": 3}),
+            "suspects": forms.Textarea(attrs={"rows": 2}),
+            "affected_items_details": forms.Textarea(attrs={"rows": 4}),
             "occurrence_summary": forms.Textarea(attrs={"rows": 3}),
             "immediate_action_taken": forms.Textarea(attrs={"rows": 3}),
             "investigation_findings": forms.Textarea(attrs={"rows": 4}),
@@ -492,11 +694,29 @@ class IncidentManagementForm(StyledModelForm):
         self.action = action
         self.user = user
         super().__init__(*args, **kwargs)
+        self.setup_reported_to_field()
         investigators = Employee.objects.exclude(status="inactive").order_by("employee_number", "first_name", "last_name")
         self.fields["investigation_assigned_to"].queryset = investigators
         self.fields["investigation_assigned_to"].empty_label = "Select investigator..."
+        self.setup_guards_on_duty_field()
         for field_name in self.fields:
             self.fields[field_name].required = False
+
+    def setup_reported_to_field(self):
+        choices = [
+            ("", "Select recipient..."),
+            ("Control Room", "Control Room"),
+            ("Manager", "Manager"),
+            ("Police", "Police"),
+        ]
+        existing_value = (self.instance.reported_to or "").strip()
+        selected = existing_value if existing_value in dict(choices) else ""
+        if existing_value and not selected:
+            selected = existing_value
+            choices.append((existing_value, existing_value))
+        self.fields["reported_to"].choices = choices
+        if selected:
+            self.initial["reported_to"] = selected
 
     def clean(self):
         cleaned_data = super().clean()
@@ -514,6 +734,7 @@ class IncidentManagementForm(StyledModelForm):
 
     def save(self, commit=True):
         incident = super().save(commit=False)
+        self.save_guards_on_duty(incident)
         if self.action == "assign_investigation":
             incident.status = "investigating"
         elif self.action == "save_findings" and incident.status in ("reported", "notified"):

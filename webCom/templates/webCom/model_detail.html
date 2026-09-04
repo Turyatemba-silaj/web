@@ -18,6 +18,10 @@
         {% if model_name == "training" %}
             <a class="btn primary" href="{% url 'webcom:training_certificate' pk %}">Generate Certificate</a>
         {% endif %}
+        {% if model_name == "job-applications" and object.resume %}
+            <a class="btn primary" href="{% url 'webcom:job_application_resume' pk %}" target="_blank" rel="noopener">View Resume</a>
+            <a class="btn" href="{% url 'webcom:job_application_resume' pk %}?download=1">Download Resume</a>
+        {% endif %}
         {% if model_name == "employees" and object.can_transfer %}
             <a class="btn primary" href="{% url 'webcom:employee_transfer' pk %}">Transfer</a>
         {% endif %}
@@ -45,7 +49,14 @@
     <dl class="detail-list">
         {% for label, value in details %}
             <dt>{{ label }}</dt>
-            <dd>{{ value }}</dd>
+            <dd>
+                {% if model_name == "job-applications" and label == "Resume" and object.resume %}
+                    <a class="btn primary" href="{% url 'webcom:job_application_resume' pk %}" target="_blank" rel="noopener">View Resume</a>
+                    <a class="btn" href="{% url 'webcom:job_application_resume' pk %}?download=1">Download Resume</a>
+                {% else %}
+                    {{ value }}
+                {% endif %}
+            </dd>
         {% endfor %}
     </dl>
 </div>
