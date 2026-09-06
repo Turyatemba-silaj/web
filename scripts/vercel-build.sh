@@ -72,6 +72,11 @@ export DJANGO_ALLOWED_HOSTS="${DJANGO_ALLOWED_HOSTS:-.vercel.app}"
 export DATABASE_URL="${database_url}"
 export DATABASE_SSL_REQUIRE="${DATABASE_SSL_REQUIRE:-true}"
 
+echo "Running Django deployment checks..."
 python manage.py check --deploy
+
+echo "Collecting static files..."
 python manage.py collectstatic --noinput
+
+echo "Running database migrations..."
 python manage.py migrate --noinput
