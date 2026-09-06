@@ -34,6 +34,10 @@ normalize_database_url() {
   echo "${value}"
 }
 
+if [ -z "${DJANGO_SECRET_KEY:-}" ] && [ -n "${SECRET_KEY:-}" ]; then
+  export DJANGO_SECRET_KEY="${SECRET_KEY}"
+fi
+
 require_env "DJANGO_SECRET_KEY"
 database_url="$(first_database_url || true)"
 database_url="$(normalize_database_url "${database_url}")"
